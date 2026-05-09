@@ -1,0 +1,234 @@
+@startuml AIVAS Class Diagram
+top to bottom direction
+' skinparam linetype ortho
+
+class User {
+    +id: int
+    +name: String
+    +role: String
+    +email: String
+    +passwordHash: String
+    +lastLogin: DateTime
+    +isActive: boolean
+    +authenticate(password:String): boolean
+    +changePassword(oldPwd:String, newPwd:String): boolean
+    +authorize(permission:String): boolean
+    +performAction(action:String): void
+}
+
+class Vendor {
+    +id: int
+    +name: String
+    +contactInfo: String
+    +address: String
+    +phone: String
+    +status: String
+    +sendDeliveryOrder(do: DeliveryOrder): void
+    +createDeliveryOrder(poId:int): DeliveryOrder
+    +updateContact(info:String): void
+}
+
+class Item {
+    +id: int
+    +sku: String
+    +name: String
+    +unit: String
+    +description: String
+    +unitPrice: Decimal
+    +weight: Decimal
+    +dimensions: String
+    +category: String
+    +calculateVolume(): Decimal
+    +adjustUnit(newUnit:String): void
+}
+
+class PurchaseOrder {
+    +id: int
+    +poNumber: String
+    +date: Date
+    +status: String
+    +createdBy: int
+    +vendorId: int
+    +totalAmount: Decimal
+    +currency: String
+    +approve(by: int): void
+    +reject(by: int, reason:String): void
+    +addItem(itemId:int, qty:int): void
+    +calculateTotal(): Decimal
+    +cancel(by:int): void
+}
+
+class PurchaseOrderItem {
+    +id: int
+    +purchaseOrderId: int
+    +itemId: int
+    +quantityOrdered: int
+    +unit: String
+    +unitPrice: Decimal
+    +receivedQty: int
+    +expectedQty: int
+    +getSubtotal(): Decimal
+}
+
+class DeliveryOrder {
+    +id: int
+    +doNumber: String
+    +status: String
+    +purchaseOrderId: int
+    +vendorId: int
+    +lockShipment(): void
+    +markShipped(): void
+    +shippedAt: DateTime
+    +carrier: String
+    +trackingNumber: String
+    +items: List
+    +generateQRCode(): QRCode
+}
+
+class QRCode {
+    +id: int
+    +code: String
+    +relatedType: String
+    +relatedId: int
+    +generatedAt: DateTime
+    +generate(): void
+    +print(): void
+    +status: String
+    +printedBy: int
+    +verify(): boolean
+}
+
+class InboundScan {
+    +id: int
+    +qrCodeId: int
+    +scannedAt: DateTime
+    +scannedBy: int
+    +qtyActual: int
+    +status: String
+    +expectedQty: int
+    +scan(): void
+    +compare(): boolean
+    +location: String
+    +deviceId: String
+    +notes: String
+    +recordGeoTag(lat:float,lon:float): void
+    +attachPhotos(urls:List): void
+}
+
+class PhotoEvidence {
+    +id: int
+    +inboundScanId: int
+    +url: String
+    +timestamp: DateTime
+    +attach(fileUrl:String): void
+    +uploadedBy: int
+    +mimeType: String
+    +thumbnailUrl: String
+}
+
+class GeoTag {
+    +id: int
+    +inboundScanId: int
+    +latitude: float
+    +longitude: float
+    +timestamp: DateTime
+    +accuracy: float
+}
+
+class DiscrepancyTicket {
+    +id: int
+    +inboundScanId: int
+    +status: String
+    +createdAt: DateTime
+    +assignedTo: int
+    +notes: String
+    +assign(userId:int): void
+    +close(resolution:String): void
+    +escalate(): void
+    +severity: String
+    +history: List
+    +reopen(reason:String): void
+}
+
+class InventoryRecord {
+    +id: int
+    +itemId: int
+    +quantity: int
+    +location: String
+    +lastUpdated: DateTime
+    +adjust(qtyDelta:int): void
+    +reservedQty: int
+    +availableQty(): int
+    +lastCountedAt: DateTime
+}
+
+class AuditLog {
+    +id: int
+    +entityType: String
+    +entityId: int
+    +action: String
+    +performedBy: int
+    +timestamp: DateTime
+    +record(): void
+    +details: String
+    +ipAddress: String
+}
+interface IAuditable {
+        +audit(): void
+}
+
+' Specialize User into concrete actor types
+class PPIC
+class VendorUser
+class InboundUser
+class SupervisorUser
+
+' VendorUser links to Vendor entity
+VendorUser : +vendorId : int
+
+' Relations using UML semantics
+' Extension: User specialized by concrete user classes
+User <|-- PPIC
+User <|-- VendorUser
+User <|-- InboundUser
+User <|-- SupervisorUser
+
+' Implementation: domain objects that are auditable
+IAuditable <|.. PurchaseOrder
+IAuditable <|.. DeliveryOrder
+IAuditable <|.. InboundScan
+IAuditable <|.. DiscrepancyTicket
+IAuditable <|.. InventoryRecord
+
+' Composition: whole-part where part cannot exist independently
+PurchaseOrder "1" *-- "1..*" PurchaseOrderItem : contains
+PurchaseOrderItem "*" o-- "1" Item : references
+PurchaseOrder "1" *-- "0..*" DeliveryOrder : results_in
+DeliveryOrder "1" *-- "0..*" QRCode : generates
+InboundScan "1" *-- "0..*" PhotoEvidence : has
+InboundScan "1" *-- "0..1" GeoTag : records
+InboundScan "1" *-- "0..1" DiscrepancyTicket : generates
+
+' Aggregation: part can exist independently of whole
+Item "1" o-- "0..*" InventoryRecord : stocked_as
+
+' Dependency: uses / weak dependencies
+InboundScan --> QRCode : uses
+PurchaseOrder ..> Vendor : requested_from
+
+' User-role specific associations
+PPIC "1" -- "0..*" PurchaseOrder : creates
+VendorUser "1" -- "0..*" DeliveryOrder : manages
+Vendor "1" o-- "0..*" VendorUser : employs
+InboundUser "1" -- "0..*" InboundScan : performs
+SupervisorUser "1" -- "0..*" DiscrepancyTicket : handles
+
+' Audit relations
+User "1" -- "0..*" AuditLog : performs
+IAuditable ..> AuditLog : logs
+
+' note top of DiscrepancyTicket
+'     DiscrepancyTicket lifecycle managed by Supervisor
+' end note
+
+@enduml

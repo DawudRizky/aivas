@@ -1,0 +1,191 @@
+@startuml AIVAS ER Diagram
+top to bottom direction
+' skinparam linetype ortho
+
+entity User {
+  * id : INT <<PK>>
+  --
+  name : VARCHAR
+  role : VARCHAR
+  email : VARCHAR
+  passwordHash : VARCHAR
+  lastLogin : DATETIME
+  isActive : BOOLEAN
+  vendorId : INT <<FK>>
+}
+
+entity Vendor {
+  * id : INT <<PK>>
+  --
+  name : VARCHAR
+  contactInfo : VARCHAR
+  address : VARCHAR
+  phone : VARCHAR
+  status : VARCHAR
+}
+
+entity Item {
+  * id : INT <<PK>>
+  --
+  sku : VARCHAR
+  name : VARCHAR
+  unit : VARCHAR
+  description : TEXT
+  unitPrice : DECIMAL
+  weight : DECIMAL
+  dimensions : VARCHAR
+  category : VARCHAR
+}
+
+entity PurchaseOrder {
+  * id : INT <<PK>>
+  --
+  poNumber : VARCHAR
+  date : DATE
+  status : VARCHAR
+  createdBy : INT <<FK>>
+  vendorId : INT <<FK>>
+  receivedBy : INT <<FK>>
+  totalAmount : DECIMAL
+  currency : VARCHAR
+}
+
+entity PurchaseOrderItem {
+  * id : INT <<PK>>
+  --
+  purchaseOrderId : INT <<FK>>
+  itemId : INT <<FK>>
+  quantityOrdered : INT
+  unit : VARCHAR
+  unitPrice : DECIMAL
+  receivedQty : INT
+  expectedQty : INT
+}
+
+entity DeliveryOrder {
+  * id : INT <<PK>>
+  --
+  doNumber : VARCHAR
+  purchaseOrderId : INT <<FK>>
+  vendorId : INT <<FK>>
+  status : VARCHAR
+  shippedAt : DATETIME
+  carrier : VARCHAR
+  trackingNumber : VARCHAR
+}
+
+entity DeliveryOrderItem {
+  * id : INT <<PK>>
+  --
+  deliveryOrderId : INT <<FK>>
+  itemId : INT <<FK>>
+  quantity : INT
+  unit : VARCHAR
+}
+
+entity QRCode {
+  * id : INT <<PK>>
+  --
+  code : VARCHAR
+  relatedType : VARCHAR
+  relatedId : INT
+  generatedAt : DATETIME
+  status : VARCHAR
+  printedBy : INT <<FK>>
+}
+
+entity InboundScan {
+  * id : INT <<PK>>
+  --
+  qrCodeId : INT <<FK>>
+  scannedAt : DATETIME
+  scannedBy : INT <<FK>>
+  qtyActual : INT
+  expectedQty : INT
+  status : VARCHAR
+  location : VARCHAR
+  deviceId : VARCHAR
+  notes : TEXT
+}
+
+entity PhotoEvidence {
+  * id : INT <<PK>>
+  --
+  inboundScanId : INT <<FK>>
+  url : VARCHAR
+  timestamp : DATETIME
+  mimeType : VARCHAR
+  thumbnailUrl : VARCHAR
+}
+
+entity GeoTag {
+  * id : INT <<PK>>
+  --
+  inboundScanId : INT <<FK>>
+  latitude : DECIMAL
+  longitude : DECIMAL
+  timestamp : DATETIME
+  accuracy : DECIMAL
+}
+
+entity DiscrepancyTicket {
+  * id : INT <<PK>>
+  --
+  inboundScanId : INT <<FK>>
+  status : VARCHAR
+  createdAt : DATETIME
+  assignedTo : INT <<FK>>
+  notes : TEXT
+  severity : VARCHAR
+  history : TEXT
+  reopenReason : TEXT
+}
+
+entity InventoryRecord {
+  * id : INT <<PK>>
+  --
+  itemId : INT <<FK>>
+  quantity : INT
+  reservedQty : INT
+  location : VARCHAR
+  lastUpdated : DATETIME
+  lastCountedAt : DATETIME
+}
+
+entity AuditLog {
+  * id : INT <<PK>>
+  --
+  entityType : VARCHAR
+  entityId : INT
+  action : VARCHAR
+  details : TEXT
+  performedBy : INT <<FK>>
+  ipAddress : VARCHAR
+  timestamp : DATETIME
+}
+
+' Relationships
+User ||--o{ PurchaseOrder : creates
+User ||--o{ PurchaseOrder : receives
+PurchaseOrder ||--|{ PurchaseOrderItem : contains
+PurchaseOrderItem }|--|| Item : references
+PurchaseOrder ||--o{ DeliveryOrder : results_in
+DeliveryOrder }o--|| Vendor : vendor
+PurchaseOrder }o--|| Vendor : vendor
+DeliveryOrder ||--o{ QRCode : generates
+DeliveryOrder ||--o{ DeliveryOrderItem : has
+DeliveryOrderItem }|--|| Item : references
+
+QRCode ||--o{ InboundScan : scanned_as
+InboundScan ||--o{ PhotoEvidence : has
+User ||--o{ InboundScan : performs
+InboundScan ||--o{ GeoTag : records
+InboundScan ||--o{ DiscrepancyTicket : may_generate
+Item ||--o{ InventoryRecord : stocked_as
+
+DiscrepancyTicket }o--|| User : assigned_to
+Vendor ||--o{ User : has_users
+User ||--o{ QRCode : prints
+User ||--o{ AuditLog : performs
+
+@enduml

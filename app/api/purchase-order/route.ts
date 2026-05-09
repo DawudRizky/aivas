@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
-// import { supabase } from '../../../lib/supabase'
 import { createClient } from '@/lib/supabase/server'
+import { getUserFromReq } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(req: Request) {
+  const user = await getUserFromReq(req)
+  if (!user) return new Response('Unauthorized', { status: 401 })
+
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('purchase_order')
@@ -25,7 +28,15 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const user = await getUserFromReq(req)
+  if (!user) return new Response('Unauthorized', { status: 401 })
+
   const body = await req.json()
+  // Only ppic or supervisor may create purchase orders
+  if (!user.roles || !(user.roles.includes('ppic') || user.roles.includes('supervisor'))) {
+    return new Response('Forbidden', { status: 403 })
+  }
+
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('purchase_order')
@@ -34,7 +45,7 @@ export async function POST(req: Request) {
         po_number: body.po_number,
         date: new Date(),
         status: 'submitted',
-        created_by: body.created_by,
+        created_by: user.id,
         vendor_id: body.vendor_id,
         received_by: body.received_by || null,
         total_amount: body.total_amount,

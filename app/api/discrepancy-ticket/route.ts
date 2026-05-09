@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
-// import { supabase } from '../../../lib/supabase'
 import { createClient } from '@/lib/supabase/server'
+import { getUserFromReq } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(req: Request) {
+  const user = await getUserFromReq(req)
+  if (!user) return new Response('Unauthorized', { status: 401 })
+
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('discrepancy_ticket')
@@ -30,18 +33,24 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const user = await getUserFromReq(req)
+  if (!user) return new Response('Unauthorized', { status: 401 })
+  // Only inbound or supervisor can create discrepancy tickets
+  if (!user.roles || !(user.roles.includes('inbound') || user.roles.includes('supervisor'))) {
+    return new Response('Forbidden', { status: 403 })
+  }
+  const payload = await req.json()
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('discrepancy_ticket')
     .insert([
       {
-        inbound_scan_id: body.inbound_scan_id,
+        inbound_scan_id: payload.inbound_scan_id,
         status: 'open',
         created_at: new Date(),
-        assigned_to: body.assigned_to,
-        notes: body.notes,
-        severity: body.severity || 'medium',
+        assigned_to: payload.assigned_to,
+        notes: payload.notes,
+        severity: payload.severity || 'medium',
         history: 'Ticket created automatically',
         reopen_reason: null
       }

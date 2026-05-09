@@ -1,10 +1,18 @@
 // app/api/photo-evidence/route.ts
 
 import { NextResponse } from 'next/server'
-// import { supabase } from '../../../lib/supabase'
 import { createClient } from '@/lib/supabase/server'
+import { getUserFromReq } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(req: Request) {
+  const user = await getUserFromReq(req)
+  if (!user) return new Response('Unauthorized', { status: 401 })
+
+  // Only inbound or supervisor can upload photo evidence
+  if (!user.roles || !(user.roles.includes('inbound') || user.roles.includes('supervisor'))) {
+    return new Response('Forbidden', { status: 403 })
+  }
+
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('photo_evidence')
@@ -28,6 +36,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const user = await getUserFromReq(req)
+  if (!user) return new Response('Unauthorized', { status: 401 })
+
   const body = await req.json()
   const supabase = await createClient()
   const { data, error } = await supabase
