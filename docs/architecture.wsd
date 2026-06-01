@@ -1,0 +1,58 @@
+@startuml AIVAS System Architecture
+title AIVAS - Deployment Architecture (Vercel + Supabase + GitHub)
+left to right direction
+
+package "Clients" {
+  [PPIC Portal (Web)] as ppic
+  [Vendor Portal (Web)] as vendor
+  [Inbound Scanner App (Mobile/Browser)] as scanner
+  [Supervisor Dashboard (Web)] as supervisor
+}
+
+node "Vercel" as vercel {
+  component "Frontend (Next.js on Vercel)" as frontend
+  component "Serverless API (Next.js API Routes / Edge Functions)" as api
+  ' component "Background Jobs / Scheduled Functions" as jobs
+}
+
+database "Supabase (Postgres)" as db
+cloud "Supabase Storage (Object Storage)" as storage
+
+
+node "GitHub (Repo)" as github
+
+vendor --> frontend : Uses
+scanner --> frontend : Uses (offline queue + sync)
+supervisor --> frontend : Uses
+
+ppic --> frontend : Uses
+
+frontend --> api : API calls (HTTPS)
+api --> db : Read / Write
+api --> storage : Upload / Download photos
+' jobs --> db : background writes (tickets, audit)
+' jobs --> storage : image processing / thumbnails
+
+github --> vercel : Push to main triggers Vercel build & deploy
+
+' note bottom of storage
+'   Photo/attachment storage: Supabase Storage (S3 compatible). DB stores URLs and metadata only.
+' end note
+
+' note right of api
+'   - Verify QR signature (HMAC)
+'   - Idempotency for scan receipts
+'   - Rate-limit and RBAC checks
+' end note
+
+' note top of github
+'   - GitHub holds source; Vercel automatically builds & deploys on push to configured branches.
+'   - Use GitHub Actions only for CI, pre-merge checks, or migration jobs (optional).
+' end note
+
+' note left of db
+'   - Supabase used only for Postgres and Object Storage in this deployment.
+'   - Authentication is handled separately (not Supabase Auth).
+' end note
+
+@enduml

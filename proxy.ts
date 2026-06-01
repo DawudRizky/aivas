@@ -1,20 +1,42 @@
 import { updateSession } from "@/lib/supabase/proxy";
-import { type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
+import { getUserFromReq } from "./lib/auth";
+
+const ROLE_FOR_PREFIX: Record<string, string> = {
+  
+  '/ppic': 'ppic',
+  '/vendor': 'vendor',
+  '/inbound': 'inbound',
+  '/supervisor': 'supervisor'
+}
 
 export async function proxy(request: NextRequest) {
+  // Enforce role-based access for protected prefixes
+  try {
+    const url = new URL(request.url)
+    const pathname = url.pathname
+    const match = Object.keys(ROLE_FOR_PREFIX).find(p => pathname === p || pathname.startsWith(p + '/'))
+    if (match) {
+      const user = await getUserFromReq(request)
+      if (!user) {
+        const loginUrl = new URL('/login', request.url)
+        return NextResponse.redirect(loginUrl)
+      }
+      const requiredRole = ROLE_FOR_PREFIX[match]
+      if (!user.roles || !user.roles.includes(requiredRole)) {
+        return new Response('Forbidden', { status: 403 })
+      }
+    }
+  } catch (err) {
+    return new Response('Forbidden', { status: 403 })
+  }
+
+  // continue existing proxy/session behavior
   return await updateSession(request);
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - images - .svg, .png, .jpg, .jpeg, .gif, .webp
-     * Feel free to modify this pattern to include more paths.
-     */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

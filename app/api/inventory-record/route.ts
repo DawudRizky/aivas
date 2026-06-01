@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server'
-// import { supabase } from '../../../lib/supabase'
 import { createClient } from '@/lib/supabase/server'
+import { getUserFromReq } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(req: Request) {
+  const user = await getUserFromReq(req)
+  if (!user) return new Response('Unauthorized', { status: 401 })
+
+  // Only ppic, inbound or supervisor may create inventory records
+  if (!user.roles || !(user.roles.includes('ppic') || user.roles.includes('inbound') || user.roles.includes('supervisor'))) {
+    return new Response('Forbidden', { status: 403 })
+  }
+
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('inventory_record')
@@ -26,21 +34,46 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const user = await getUserFromReq(req)
+  if (!user) return new Response('Unauthorized', { status: 401 })
+
   const body = await req.json()
   const supabase = await createClient()
-  const { data, error } = await supabase
+  const itemId = Number(body.item_id)
+  const quantity = Number(body.quantity || 0)
+  const location = body.location || 'permanent storage'
+
+  const { data: existingRecord, error: existingError } = await supabase
     .from('inventory_record')
-    .insert([
-      {
-        item_id: body.item_id,
-        quantity: body.quantity,
-        reserved_qty: body.reserved_qty || 0,
-        location: body.location,
-        last_updated: new Date(),
-        last_counted_at: new Date()
-      }
-    ])
-    .select()
+    .select('id, quantity')
+    .eq('item_id', itemId)
+    .eq('location', location)
+    .maybeSingle()
+
+  if (existingError) {
+    return NextResponse.json({ error: existingError.message }, { status: 500 })
+  }
+
+  const nextQuantity = Number(existingRecord?.quantity || 0) + quantity
+  const payload = {
+    item_id: itemId,
+    quantity: nextQuantity,
+    reserved_qty: body.reserved_qty || 0,
+    location,
+    last_updated: new Date(),
+    last_counted_at: new Date(),
+  }
+
+  const { data, error } = existingRecord
+    ? await supabase
+        .from('inventory_record')
+        .update(payload)
+        .eq('id', existingRecord.id)
+        .select()
+    : await supabase
+        .from('inventory_record')
+        .insert([payload])
+        .select()
 
   if (error) {
     return NextResponse.json(

@@ -1,0 +1,69 @@
+@startuml AIVAS Activity Diagram
+' |#LightCoral|PPIC|
+|PPIC|
+start
+:Hitung Kebutuhan Barang;
+:Buat Dokumen PO;
+:Submit Dokumen PO ke Sistem;
+' |#LightGoldenRodYellow|AIVAS System|
+|AIVAS System|
+:Simpan Dokumen PO; 
+:Kirim ke Vendor;
+' |#LightGreen|Vendor|
+|Vendor|
+:Terima PO;
+:Siapkan Barang;
+:Input Detail DO;
+:Kunci Pengiriman;
+|AIVAS System|
+:Generate QR Code;
+|Vendor|
+:Cetak QR Code;
+:Tempelkan QR Code pada Barang;
+:Kirim Barang ke Epson;
+' |#LightSkyBlue|Inbound|
+|Inbound|
+:Terima Barang;
+:Scan QR Code;
+|AIVAS System|
+:Tampilkan Detail Pengiriman;
+|Inbound|
+:Hitung Jumlah Aktual;
+:Input Jumlah Aktual;
+:Ambil Foto Barang;
+|AIVAS System|
+:Simpan Geo-tag dan Timestamp;
+:Auto-Compare Data;
+if (Data Sesuai?) then (Ya)
+    :Status: MATCH;
+    :Data Masuk Inventory;
+    stop 
+else (Tidak)
+    :Status: HOLD;
+    :Buat Tiket Ketidaksesuaian;
+    ' |#Plum|Supervisor|
+    |Supervisor|
+    :Lihat Tiket Ketidaksesuaian;
+    split
+        :Status: APPROVE;
+        note
+            Data Masuk Inventory
+        end note
+        stop
+    split again
+        |Supervisor|
+        :Status: RECOUNT;
+        note
+            Kirim Notifikasi ke 
+            Inbound untuk Recount
+        end note
+        stop
+    split again
+        |Supervisor|
+        :Status: RETURN;
+        note
+            Kirim Notifikasi 
+            Pengembalian ke Vendor
+        end note
+        stop
+@enduml

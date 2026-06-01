@@ -1,0 +1,43 @@
+@startuml AIVAS Use Case Diagram
+left to right direction
+' skinparam linetype ortho
+
+
+actor "PPIC" as p
+actor "Vendor" as v
+actor "Inbound" as i
+actor "Supervisor" as s
+
+rectangle AIVAS {
+    usecase "Membuat\nDokumen PO" as UC1
+    usecase "Mengirim PO\nke Vendor" as UC2
+    usecase "Membuat\nDokumen DO" as UC3
+    usecase "Mengunci\nPengiriman" as UC4
+    usecase "Mencetak\nQR Code" as UC5
+    usecase "Menghasilkan\nQR Code" as UC6
+    usecase "Memindai\nQR Code" as UC7
+    usecase "Memasukkan\nJumlah Aktual" as UC8
+    usecase "Auto-Compare\nData" as UC9
+    usecase "Mengambil\nBukti Foto" as UC10
+    usecase "Menyimpan Geo-tag\ndan Timestamp" as UC11
+    usecase "Memantau Analitik\nKetidaksesuaian" as UC12
+    usecase "Memberikan Keputusan\nTidak Lanjut" as UC13  
+}
+
+p --> UC2
+p --> UC1
+
+v --> UC3
+v --> UC4
+v --> UC5
+    UC5 ..> UC6 : <<include>>
+
+i --> UC7
+i --> UC9
+i --> UC10
+    UC9 ..> UC8 : <<include>>
+    UC10 ..> UC11 : <<include>>
+
+s --> UC12
+s --> UC13
+@enduml

@@ -1,7 +1,33 @@
 "use client";
-
+import { useEffect, useState } from "react";
 
 export default function PpicDashboardPage() {
+  const [deliveryOrders, setDeliveryOrders] = useState([]);
+  const [discrepancyTickets, setDiscrepancyTickets] = useState([]);
+  const [vendors, setVendors] = useState([]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    Promise.all([
+      fetch('/api/delivery-order').then(r => r.json()).catch(() => []),
+      fetch('/api/discrepancy-ticket').then(r => r.json()).catch(() => []),
+      fetch('/api/vendor').then(r => r.json()).catch(() => []),
+    ]).then(([dos, tickets, vends]) => {
+      if (!mounted) return;
+      setDeliveryOrders(Array.isArray(dos) ? dos : []);
+      setDiscrepancyTickets(Array.isArray(tickets) ? tickets : []);
+      setVendors(Array.isArray(vends) ? vends : []);
+    }).catch(() => {});
+
+    return () => { mounted = false };
+  }, []);
+
+  const totalShipments = deliveryOrders.length;
+  const verifiedCount = deliveryOrders.filter(d => ['verified','received','delivered'].includes((d.status || '').toLowerCase())).length;
+  const ticketCount = discrepancyTickets.length;
+  const matchRate = totalShipments > 0 ? Math.round(((totalShipments - ticketCount) / totalShipments) * 1000) / 10 : 100;
+  const openTickets = discrepancyTickets.filter(t => !(t.status && t.status.toLowerCase() === 'resolved')).length;
   return (
     <div className="space-y-6 text-black">
       {/* Header Section */}
@@ -27,8 +53,8 @@ export default function PpicDashboardPage() {
               12%
             </div>
           </div>
-          <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">47</h3>
+            <div>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{totalShipments}</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Total Shipment</p>
           </div>
         </div>
@@ -49,7 +75,7 @@ export default function PpicDashboardPage() {
             </div>
           </div>
           <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">42</h3>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{verifiedCount}</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Terverifikasi</p>
           </div>
         </div>
@@ -70,7 +96,7 @@ export default function PpicDashboardPage() {
             </div>
           </div>
           <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">78.6%</h3>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{matchRate}%</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Match Rate</p>
           </div>
         </div>
@@ -91,7 +117,7 @@ export default function PpicDashboardPage() {
             </div>
           </div>
           <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">5</h3>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{openTickets}</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Open Tickets</p>
           </div>
         </div>
@@ -162,54 +188,34 @@ export default function PpicDashboardPage() {
             <h3 className="text-base font-bold text-slate-800">Vendor Performance</h3>
           </div>
 
-          <div className="space-y-4 flex-1">
-            {/* Vendor 1 */}
-            <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-bold text-slate-800">PT. Maju Komponen</span>
-                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">Score: 92%</span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-1.5 mb-2">
-                <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '92%' }}></div>
-              </div>
-              <div className="flex gap-3 text-[10px] text-slate-500 font-medium">
-                <span>24 shipment</span>
-                <span className="text-emerald-500">22 match</span>
-                <span className="text-rose-500">2 discrepancy</span>
-              </div>
-            </div>
+              <div className="space-y-4 flex-1">
+            {vendors.map((v) => {
+              const shipments = deliveryOrders.filter(d => (d.vendor?.id || d.vendor_id) === v.id).length;
+              // approximate discrepancy count per vendor by counting tickets whose inbound_scan?.status mentions vendor indirectly (best-effort)
+              const discrepancies = discrepancyTickets.filter(t => {
+                try {
+                  return (t.inbound_scan && t.inbound_scan.vendor_id && t.inbound_scan.vendor_id === v.id);
+                } catch { return false }
+              }).length;
+              const score = shipments > 0 ? Math.round(((shipments - discrepancies) / shipments) * 100) : 100;
 
-            {/* Vendor 2 */}
-            <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-bold text-slate-800">CV. Sejahtera Parts</span>
-                <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">Score: 66.7%</span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-1.5 mb-2">
-                <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '66.7%' }}></div>
-              </div>
-              <div className="flex gap-3 text-[10px] text-slate-500 font-medium">
-                <span>12 shipment</span>
-                <span className="text-emerald-500">8 match</span>
-                <span className="text-rose-500">4 discrepancy</span>
-              </div>
-            </div>
-
-            {/* Vendor 3 */}
-            <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-bold text-slate-800">PT. Abadi Teknik</span>
-                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">Score: 90%</span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-1.5 mb-2">
-                <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '90%' }}></div>
-              </div>
-              <div className="flex gap-3 text-[10px] text-slate-500 font-medium">
-                <span>10 shipment</span>
-                <span className="text-emerald-500">9 match</span>
-                <span className="text-rose-500">1 discrepancy</span>
-              </div>
-            </div>
+              return (
+                <div key={v.id} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-bold text-slate-800">{v.name}</span>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">Score: {score}%</span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-1.5 mb-2">
+                    <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${score}%` }}></div>
+                  </div>
+                  <div className="flex gap-3 text-[10px] text-slate-500 font-medium">
+                    <span>{shipments} shipment</span>
+                    <span className="text-emerald-500">{Math.max(0, shipments - discrepancies)} match</span>
+                    <span className="text-rose-500">{discrepancies} discrepancy</span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
 
