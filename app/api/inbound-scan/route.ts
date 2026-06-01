@@ -6,8 +6,8 @@ export async function GET(req: Request) {
   const user = await getUserFromReq(req)
   if (!user) return new Response('Unauthorized', { status: 401 })
 
-  // Only inbound users or supervisor may create inbound scans
-  if (!user.roles || !(user.roles.includes('inbound') || user.roles.includes('supervisor'))) {
+  // Allow inbound, supervisor, and admin to read inbound scan history
+  if (!user.roles || !(user.roles.includes('inbound') || user.roles.includes('supervisor') || user.roles.includes('admin'))) {
     return new Response('Forbidden', { status: 403 })
   }
 
@@ -18,13 +18,24 @@ export async function GET(req: Request) {
       *,
       qr_code (
         id,
-        code
+        code,
+        box_number,
+        quantity,
+        delivery_order (
+          do_number
+        ),
+        item (
+          id,
+          sku,
+          name
+        )
       ),
       users (
         id,
         name
       )
     `)
+    .order('scanned_at', { ascending: false })
 
   if (error) {
     return NextResponse.json(

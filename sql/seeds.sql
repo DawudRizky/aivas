@@ -10,39 +10,49 @@ INSERT INTO vendor (id, name, contact_info, address, phone, status) VALUES
 
 -- Users (provided rows)
 INSERT INTO users (id, name, role, email, password_hash, last_login, is_active, vendor_id) VALUES
-  (1, 'inbound 01', 'admin', 'inbound01@email.com', '$2a$12$ReqOogxT3ifJi7NexMQS4.98un3xT0w.Y9mThRDx/d6TTSWlpMzBK', NULL, true, NULL),
-  (2, 'ppic 01', 'ppic', 'ppic01@email.com', '$2a$12$TbzVR35GzwJm/Yjr1630H.6WhlCgANMZUdI0ccRU0pS2w2Za5mxc6', NULL, true, NULL),
-  (3, 'supervisor 01', 'supervisor', 'supervisor01@email.com', '$2a$12$RUzPYkT.ap8v4fkC.jT0WOg2HSX1moItt7eArr9l.Kh5pnr9j468m', NULL, true, NULL),
-  (4, 'vendor 01', 'vendor', 'vendor01@email.com', '$2a$12$mUOOc22BjoJPMW8c044qq.xyT2W5YJtUnMj6dwHCDo8rpYSKEsEbu', NULL, true, NULL);
+  (1, 'inbound 01', 'admin', 'inbound01@email.com', '$2a$12$WC7q.WqyJ9NMSUJTKGOcoesrCUtFIV1qDUxyCekq2vmEKVIAwn6dm', NULL, true, NULL),
+  (2, 'ppic 01', 'ppic', 'ppic01@email.com', '$2a$12$jX/yuA/KadgCz8LoKo.xoO0oMCxFZPQY.bY5UDNpFIkrPwraOWzU6', NULL, true, NULL),
+  (3, 'supervisor 01', 'supervisor', 'supervisor01@email.com', '$2a$12$WXLSxGy9QrxNOPnySsEFvOF.3Hu05vi1g8Oje2NtDA7bDPBvufX3y', NULL, true, NULL),
+  (4, 'vendor 01', 'vendor', 'vendor01@email.com', '$2a$12$TGjL4DrtU7WfbV9ErzK6Au2gWb9JNNuLI76CBUsBxd.jQvjLMIFzG', NULL, true, 1),
+  (5, 'vendor 02', 'vendor', 'vendor02@email.com', '$2a$12$TGjL4DrtU7WfbV9ErzK6Au2gWb9JNNuLI76CBUsBxd.jQvjLMIFzG', NULL, true, 2);
 
 -- Items
-INSERT INTO item (id, sku, name, unit, description, unit_price, weight, dimensions, category) VALUES
-  (1, 'SKU-1001', 'Widget A', 'pcs', 'Small widget', 9.99, 0.5, '5x5x2 cm', 'widgets'),
-  (2, 'SKU-1002', 'Widget B', 'pcs', 'Medium widget', 14.50, 0.8, '7x6x3 cm', 'widgets'),
-  (3, 'SKU-2001', 'Bolt M8', 'pcs', 'Steel bolt', 0.15, 0.02, '8mm', 'hardware');
+INSERT INTO item (id, sku, name, unit, description, unit_price, low_stock_threshold, weight, dimensions) VALUES
+  (1, 'SKU-000001', 'Widget A', 'pcs', 'Small widget', 9.99, 20, 0.5, '5x5x2 cm'),
+  (2, 'SKU-000002', 'Widget B', 'pcs', 'Medium widget', 14.50, 15, 0.8, '7x6x3 cm'),
+  (3, 'SKU-000003', 'Bolt M8', 'pcs', 'Steel bolt', 0.15, 200, 0.02, '8mm');
 
--- Purchase order (created_by NULL because `users` not seeded)
+-- Item vendor sources
+INSERT INTO item_vendor_source (id, item_id, vendor_id, unit_price) VALUES
+  (1, 1, 1, 9.50),
+  (2, 1, 2, 9.80),
+  (3, 2, 1, 14.20),
+  (4, 3, 2, 0.14);
+
+-- Purchase orders
 INSERT INTO purchase_order (id, po_number, date, status, created_by, vendor_id, received_by, total_amount, currency) VALUES
-  (1, 'PO-0001', '2026-05-01', 'open', NULL, 1, NULL, 100.00, 'IDR');
+  (1, 'PO-GP-05-2026-0001', '2026-05-01', 'received', 2, 1, 4, 166.00, 'IDR'),
+  (2, 'PO-GP-05-2026-0002', '2026-05-31', 'acknowledged', 2, 2, NULL, 1.40, 'IDR');
 
 -- Purchase order items
 INSERT INTO purchase_order_item (id, purchase_order_id, item_id, quantity_ordered, unit_price, received_qty) VALUES
-  (1, 1, 1, 10, 9.99, 0),
-  (2, 1, 2, 5, 14.50, 0);
+  (1, 1, 1, 10, 9.50, 0),
+  (2, 1, 2, 5, 14.20, 0),
+  (3, 2, 3, 10, 0.14, 0);
 
 -- Delivery order
 INSERT INTO delivery_order (id, do_number, purchase_order_id, vendor_id, status, shipped_at, carrier, tracking_number) VALUES
   (1, 'DO-0001', 1, 1, 'shipped', '2026-05-02 08:00:00', 'JNE', 'TRK123456');
 
 -- Delivery order items
-INSERT INTO delivery_order_item (id, delivery_order_id, item_id, quantity) VALUES
-  (1, 1, 1, 10),
-  (2, 1, 2, 5);
+INSERT INTO delivery_order_item (id, delivery_order_id, box_number, item_id, quantity) VALUES
+  (1, 1, 1, 1, 10),
+  (2, 1, 2, 2, 5);
 
 -- QR codes (printed_by NULL)
-INSERT INTO qr_code (id, code, generated_at, status, printed_by, item_id, purchase_order_id, delivery_order_id) VALUES
-  (1, 'QR-1001', '2026-05-02 09:00:00', 'active', NULL, 1, 1, 1),
-  (2, 'QR-1002', '2026-05-02 09:05:00', 'active', NULL, 2, 1, 1);
+INSERT INTO qr_code (id, code, generated_at, status, printed_by, delivery_order_item_id, box_number, quantity, item_id, purchase_order_id, delivery_order_id) VALUES
+  (1, 'QR-1001', '2026-05-02 09:00:00', 'active', NULL, 1, 1, 10, 1, 1, 1),
+  (2, 'QR-1002', '2026-05-02 09:05:00', 'active', NULL, 2, 2, 5, 2, 1, 1);
 
 -- Inbound scans (scanned_by NULL)
 INSERT INTO inbound_scan (id, qr_code_id, scanned_at, scanned_by, qty_actual, status, location, device_id, notes) VALUES
@@ -77,6 +87,7 @@ INSERT INTO audit_log (id, entity_type, entity_id, action, details, performed_by
 SELECT setval(pg_get_serial_sequence('vendor','id'), (SELECT COALESCE(MAX(id), 1) FROM vendor));
 SELECT setval(pg_get_serial_sequence('users','id'), (SELECT COALESCE(MAX(id), 1) FROM users));
 SELECT setval(pg_get_serial_sequence('item','id'), (SELECT COALESCE(MAX(id), 1) FROM item));
+SELECT setval(pg_get_serial_sequence('item_vendor_source','id'), (SELECT COALESCE(MAX(id), 1) FROM item_vendor_source));
 SELECT setval(pg_get_serial_sequence('purchase_order','id'), (SELECT COALESCE(MAX(id), 1) FROM purchase_order));
 SELECT setval(pg_get_serial_sequence('purchase_order_item','id'), (SELECT COALESCE(MAX(id), 1) FROM purchase_order_item));
 SELECT setval(pg_get_serial_sequence('delivery_order','id'), (SELECT COALESCE(MAX(id), 1) FROM delivery_order));

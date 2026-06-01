@@ -1,78 +1,155 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+
+function formatDate(value) {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("id-ID", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function statusStyle(status) {
+  const key = String(status || "").toLowerCase();
+  if (key === "match") return "bg-emerald-100 text-emerald-700";
+  if (key === "hold") return "bg-amber-100 text-amber-700";
+  return "bg-slate-200 text-slate-700";
+}
+
+function getScanLabel(row) {
+  const doNumber = row?.qr_code?.delivery_order?.do_number;
+  const boxNumber = row?.qr_code?.box_number;
+  const itemName = row?.qr_code?.item?.name;
+  const itemSku = row?.qr_code?.item?.sku;
+
+  if (doNumber || boxNumber || itemName) {
+    const left = doNumber ? `${doNumber}` : `SCAN-${row?.id || "-"}`;
+    const mid = boxNumber !== undefined && boxNumber !== null ? `BOX-${boxNumber}` : null;
+    const right = itemName || (itemSku ? `ITEM ${itemSku}` : null);
+    return [left, mid, right].filter(Boolean).join(" / ");
+  }
+
+  const rawCode = row?.qr_code?.code;
+  const code = String(rawCode || "").trim();
+  if (!code) return `SCAN-${row?.id || "-"}`;
+
+  if (code.includes("|") && code.includes(":")) {
+    const parts = code.split("|");
+    const map = {};
+    for (const part of parts) {
+      const idx = part.indexOf(":");
+      if (idx === -1) continue;
+      const key = part.slice(0, idx).trim().toUpperCase();
+      const value = part.slice(idx + 1).trim();
+      if (key) map[key] = value;
+    }
+    const doNum = map.DO || map.DONO || map["DO_NUMBER"];
+    const boxNum = map.BOX || map.BOXNO || map["BOX_NUMBER"];
+    const itemCode = map.ITEM || map.ITEMID;
+
+    if (doNum && boxNum) return `${doNum} / BOX-${boxNum}`;
+    if (doNum) return doNum;
+    if (itemCode) return `ITEM-${itemCode}`;
+  }
+
+  return code.length > 36 ? `${code.slice(0, 36)}...` : code;
+}
 
 export default function AdminRiwayatPage() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const handleSidebarToggle = () => {
+    window.dispatchEvent(new Event("aivas-toggle-admin-sidebar"));
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const load = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const res = await fetch("/api/inbound-scan", { cache: "no-store" });
+        const data = await res.json().catch(() => []);
+        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        if (mounted) setRows(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (mounted) setError(err?.message || "Gagal memuat riwayat.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const items = useMemo(
+    () =>
+      rows.map((row) => ({
+        id: row.id,
+        qrCode: getScanLabel(row),
+        status: String(row.status || "unknown").toUpperCase(),
+        scannedAt: formatDate(row.scanned_at),
+      })),
+    [rows]
+  );
+
   return (
-   <div className="space-y-6 text-black">
-      {/* Header Section */}
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Riwayat Verifikasi</h1>
-        <p className="text-gray-500 text-sm mt-1">Log semua verifikasi inbound yang telah dilakukan</p>
-      </div>
-
-      {/* List Riwayat */}
-      <div className="space-y-4 mt-6">
-        
-        {/* Card 1 - MATCH */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer">
-          <div className="flex items-start gap-4">
-            <div className="mt-1">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-emerald-500">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <h3 className="font-bold text-slate-800 text-[15px]">SHP-2026-001 / BOX-001</h3>
-                <span className="px-2 py-0.5 rounded text-[9px] font-bold tracking-wider bg-emerald-50 text-emerald-500 uppercase">
-                  MATCH
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-1.5 font-medium">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                5/4/2026, 16.30.00
-                <span className="mx-1 text-slate-300">|</span>
-                oleh Budi Santoso
-              </div>
-            </div>
-          </div>
-          <div className="text-xs text-slate-400 font-medium">
-            2 item
+    <div className="h-full w-full overflow-hidden bg-[#f8fafc] text-slate-900">
+      <div className="h-full overflow-y-auto p-3">
+        <div className="mb-3 rounded-2xl bg-white p-3 border border-slate-200 shadow-sm">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSidebarToggle}
+              className="flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-2.5 py-1.5"
+              aria-label="Buka atau tutup sidebar"
+            >
+              <img src="/logo.png" alt="AIVAS Logo" className="h-6 w-auto object-contain" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900">AIVAS</span>
+            </button>
+            <div className="h-6 w-px bg-slate-300" />
+            <h1 className="text-sm font-black uppercase tracking-[0.2em]">
+              Riwayat Scan
+            </h1>
           </div>
         </div>
 
-        {/* Card 2 - MISMATCH */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer">
-          <div className="flex items-start gap-4">
-            <div className="mt-1">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-red-500">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <h3 className="font-bold text-slate-800 text-[15px]">SHP-2026-001 / BOX-002</h3>
-                <span className="px-2 py-0.5 rounded text-[9px] font-bold tracking-wider bg-red-50 text-red-500 uppercase">
-                  MISMATCH
+        {loading && <div className="text-[12px] text-slate-500">Memuat data...</div>}
+        {error && <div className="text-[12px] text-red-600">{error}</div>}
+        {!loading && !error && items.length === 0 && (
+          <div className="text-[12px] text-slate-500">Belum ada aktivitas scan.</div>
+        )}
+
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[12px] font-bold">{item.qrCode}</p>
+                  <p className="mt-1 text-[10px] text-slate-500">{item.scannedAt}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black tracking-wider ${statusStyle(item.status)}`}>
+                  {item.status}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-1.5 font-medium">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                5/4/2026, 17.15.00
-                <span className="mx-1 text-slate-300">|</span>
-                oleh Budi Santoso
-              </div>
             </div>
-          </div>
-          <div className="text-xs text-slate-400 font-medium">
-            3 item
-          </div>
+          ))}
         </div>
-
       </div>
     </div>
   );

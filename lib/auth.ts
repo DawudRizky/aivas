@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken'
+import { createClient } from '@/lib/supabase/server'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'replace_this_with_env_secret'
 
@@ -47,7 +48,33 @@ export async function getUserFromReq(req: Request | any) {
   const cookieHeader = req.headers?.get?.('cookie') || req.headers?.cookie || null
   const cookies = parseCookies(cookieHeader)
   const token = cookies['access_token'] || cookies['token'] || null
-  return verifyAccessToken(token)
+  return verifyAccessToken(token ?? undefined)
+}
+
+export async function getAuthenticatedUser(req: Request | any) {
+  const payload = await getUserFromReq(req)
+  if (!payload) return null
+
+  try {
+    const supabase = await createClient()
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, name, email, role, vendor_id, vendor(id,name)')
+      .eq('id', payload.id)
+      .maybeSingle()
+
+    if (!user) {
+      return payload
+    }
+
+    return {
+      ...payload,
+      ...user,
+      roles: payload.roles || (payload.role ? [payload.role] : user.role ? [user.role] : [])
+    }
+  } catch (error) {
+    return payload
+  }
 }
 
 export function requireAuth(user: UserPayload | null) {
@@ -67,4 +94,4 @@ export function requireRole(user: UserPayload | null, role: string) {
   }
 }
 
-export default { verifyAccessToken, getUserFromReq, requireAuth, requireRole }
+export default { verifyAccessToken, getUserFromReq, getAuthenticatedUser, requireAuth, requireRole }

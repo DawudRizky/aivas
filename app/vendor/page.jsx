@@ -1,139 +1,303 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function VendorPurchaseOrderPage() {
-  const [user, setUser] = useState(null);
+  const router = useRouter();
   const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
+  const [selectedPurchaseOrder, setSelectedPurchaseOrder] = useState(null);
+  const [actionError, setActionError] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
-    async function load() {
-      try {
-        // Get current user (expects cookie-based auth handled by /api/auth/me)
-        const meRes = await fetch("/api/auth/me");
-        if (!meRes.ok) throw new Error(`HTTP ${meRes.status}`);
-        const meData = await meRes.json();
-        const currentUser = meData?.user ?? null;
+    const itemLookup = new Map();
 
-        if (!currentUser) {
-          if (mounted) setError("Unauthorized: please login as vendor.");
-          return;
+    fetch("/api/purchase-order", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!mounted) return;
+
+        if (Array.isArray(data)) {
+          setPurchaseOrders(data);
+          setError("");
+        } else {
+          setPurchaseOrders([]);
+          setError(data?.error || "Gagal memuat purchase order");
         }
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setError("Gagal memuat purchase order");
+        setPurchaseOrders([]);
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoading(false);
+      });
 
-        if (currentUser.role !== "vendor") {
-          if (mounted) setError("Access denied: this page is for vendor users only.");
-          return;
-        }
+    fetch("/api/item", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!mounted) return;
 
-        if (mounted) setUser(currentUser);
+        const normalizedItems = Array.isArray(data) ? data : [];
+        normalizedItems.forEach((item) => itemLookup.set(String(item.id), item));
+        setItems(normalizedItems);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setItems([]);
+      });
 
-        // Load all purchase orders and filter by vendor id
-        const poRes = await fetch("/api/purchase-order");
-        if (!poRes.ok) throw new Error(`HTTP ${poRes.status}`);
-        const poData = await poRes.json();
-
-        const vid = currentUser.vendor_id ?? currentUser.vendor?.id;
-        const filtered = Array.isArray(poData)
-          ? poData.filter((p) => {
-              const vendorId = p.vendor_id ?? p.vendor?.id ?? p.vendor?.id;
-              return vendorId != null && String(vendorId) === String(vid);
-            })
-          : [];
-
-        if (mounted) setPurchaseOrders(filtered);
-      } catch (err) {
-        if (mounted) setError(err.message || "Failed to load data");
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-
-    load();
-    return () => (mounted = false);
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  function displayPoId(po) {
-    return po.po_number ?? "-";
-  }
+  const formatDate = (dateValue) => {
+    if (!dateValue) return "-";
+    const date = new Date(dateValue);
+    return Number.isNaN(date.getTime()) ? String(dateValue) : date.toLocaleDateString("id-ID");
+  };
 
-  function formatDate(d) {
+  const formatCurrency = (value) => {
+    const numberValue = Number(value || 0);
+    if (Number.isNaN(numberValue)) return String(value ?? "-");
+    return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(numberValue);
+  };
+
+  const selectedPurchaseOrderItemLookup = useMemo(() => {
+    const itemLookup = new Map(items.map((item) => [String(item.id), item]));
+
+    return new Map(
+      (selectedPurchaseOrder?.purchase_order_item || []).map((orderItem) => [String(orderItem.item_id), orderItem.item || itemLookup.get(String(orderItem.item_id)) || null])
+    );
+  }, [items, selectedPurchaseOrder]);
+
+  const openPurchaseOrder = (purchaseOrder) => {
+    setSelectedPurchaseOrder(purchaseOrder);
+    setActionError("");
+  };
+
+  const closePurchaseOrder = () => {
+    if (actionLoading) return;
+    setSelectedPurchaseOrder(null);
+    setActionError("");
+  };
+
+  const updatePurchaseOrderStatus = async (status) => {
+    if (!selectedPurchaseOrder) return;
+
+    setActionLoading(true);
+    setActionError("");
+
     try {
-      return new Date(d).toLocaleDateString("id-ID");
-    } catch {
-      return d || "-";
+      const response = await fetch("/api/purchase-order", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selectedPurchaseOrder.id, status }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "Gagal memperbarui purchase order");
+      }
+
+      if (status === "acknowledged") {
+        closePurchaseOrder();
+        router.push(`/vendor/buat-shipment?po=${selectedPurchaseOrder.po_number}`);
+        return;
+      }
+
+      setPurchaseOrders((currentOrders) =>
+        currentOrders.map((order) =>
+          order.id === selectedPurchaseOrder.id ? { ...order, status } : order
+        )
+      );
+      setSelectedPurchaseOrder((currentOrder) => (currentOrder ? { ...currentOrder, status } : currentOrder));
+    } catch (err) {
+      setActionError(err?.message || "Gagal memperbarui purchase order");
+    } finally {
+      setActionLoading(false);
     }
-  }
+  };
+
+  const formatItemCount = (purchaseOrder) => {
+    return purchaseOrder.purchase_order_item?.length || 0;
+  };
 
   return (
-    <div className="space-y-6 text-black">
+    <div className="space-y-6 text-black relative">
       <div>
         <h1 className="text-3xl font-bold text-slate-900">Purchase Order</h1>
-        <p className="text-gray-500 text-sm mt-1">Daftar PO yang diterima dari PPIC EPSON</p>
+        <p className="text-gray-500 text-sm mt-1">Daftar PO yang menunggu acknowledgement atau masih rejected</p>
       </div>
 
-      <div className="space-y-4 mt-6">
-        {loading && <div className="text-sm text-slate-500">Memuat Purchase Orders...</div>}
-        {error && <div className="text-sm text-red-500">{error}</div>}
-
-        {!loading && !error && purchaseOrders.length === 0 && (
-          <div className="text-sm text-slate-500">Tidak ada Purchase Order untuk vendor Anda.</div>
-        )}
-
-        {!loading && !error && purchaseOrders.map((po, index) => {
-          const poId = po.po_number ?? "-";
-          const status = po.status ?? "-";
-          const vendorName = po.vendor?.name ?? po.vendor_name ?? "-";
-          const amount = po.total_amount ? `${po.total_amount} ${po.currency ?? "IDR"}` : null;
-          const date = formatDate(po.date ?? po.created_at ?? po.date_created);
-
-          return (
-            <Link
-              key={po.id ?? index}
-              href={`/vendor/buat-shipment?po=${encodeURIComponent(po.po_number ?? po.id ?? "")}`}
-              className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] p-5 flex items-center justify-between hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
-            >
-              <div className="flex items-center gap-5">
-                <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center transition-colors group-hover:bg-blue-100 shadow-inner border border-blue-100">
-                  <img 
-                    src="/ic_listblue.jpg" 
-                    alt="PO Icon" 
-                    className="w-8 h-8 object-contain opacity-100 transition-transform group-hover:scale-110" 
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="font-bold text-slate-900 text-lg">{poId}</h3>
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase ${
-                        (status === "shipped") ? "bg-amber-100 text-amber-600" : "bg-blue-100 text-blue-500"
-                      }`}
-                    >
-                      {status}
-                    </span>
-                  </div>
-                  <div className="text-sm text-slate-400 font-medium">
-                    {vendorName} • {amount ?? "-"} • {date}
-                  </div>
-                </div>
-              </div>
-              
-              <div className="mr-2 opacity-30 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
-                <img 
-                  src="/ic_arrow.jpg" 
-                  alt="Arrow Right" 
-                  className="w-6 h-6 object-contain" 
+      {loading ? (
+        <div className="space-y-4 mt-6">
+          <div className="h-24 rounded-xl border border-slate-200 bg-white animate-pulse" />
+          <div className="h-24 rounded-xl border border-slate-200 bg-white animate-pulse" />
+        </div>
+      ) : error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 mt-6">
+          {error}
+        </div>
+      ) : purchaseOrders.length === 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-slate-500 mt-6">
+          Tidak ada purchase order untuk vendor ini.
+        </div>
+      ) : (
+        <div className="space-y-4 mt-6">
+          {purchaseOrders.map((po) => (
+          <button
+            key={po.id}
+            type="button"
+            onClick={() => openPurchaseOrder(po)}
+            className="w-full bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] p-5 flex items-center justify-between hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group text-left"
+          >
+            <div className="flex items-center gap-5">
+              {/* Icon Container */}
+              <div className="w-14 h-14 rounded-xl bg-blue-50 flex items-center justify-center transition-colors group-hover:bg-blue-100 shadow-inner border border-blue-100">
+                <img
+                  src="/ic_listblue.jpg"
+                  alt="PO Icon"
+                  className="w-8 h-8 object-contain opacity-100 transition-transform group-hover:scale-110"
                 />
               </div>
-            </Link>
-          )
-        })}
-      </div>
+
+              <div>
+                <div className="flex items-center gap-3 mb-1">
+                  <h3 className="font-bold text-slate-900 text-lg">{po.po_number}</h3>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase ${po.status === "shipped"
+                        ? "bg-amber-100 text-amber-600"
+                        : "bg-blue-100 text-blue-500"
+                      }`}
+                  >
+                    {po.status}
+                  </span>
+                </div>
+                <div className="text-sm text-slate-400 font-medium">
+                  {formatItemCount(po)} Item • {formatDate(po.date)}
+                </div>
+              </div>
+            </div>
+
+            {/* Arrow Icon */}
+            <div className="mr-2 opacity-30 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
+              <img
+                src="/ic_arrow.jpg"
+                alt="Arrow Right"
+                className="w-6 h-6 object-contain"
+              />
+            </div>
+          </button>
+          ))}
+        </div>
+      )}
+
+      {selectedPurchaseOrder ? (
+        <div
+          className="fixed inset-0 z-[70] bg-slate-950/60 backdrop-blur-sm px-4 py-6 flex items-center justify-center lg:left-64 lg:w-[calc(100vw-16rem)]"
+          onClick={closePurchaseOrder}
+        >
+          <div
+            className="w-full max-w-5xl rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50/80">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">PO Detail</h2>
+              </div>
+              <button
+                type="button"
+                onClick={closePurchaseOrder}
+                className="h-10 w-10 rounded-full hover:bg-slate-200 text-slate-500 hover:text-slate-800"
+                aria-label="Close modal"
+              >
+                X
+              </button>
+            </div>
+
+            <div className="p-6 bg-slate-50/60">
+                <div className="space-y-5">
+                  <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                    <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:col-span-2">
+                      <div className="text-slate-400 text-xs uppercase font-bold tracking-wider">PO Number</div>
+                      <div className="text-slate-900 font-semibold mt-1">{selectedPurchaseOrder.po_number}</div>
+                    </div>
+                    <div className="rounded-2xl bg-white border border-slate-200 p-4">
+                      <div className="text-slate-400 text-xs uppercase font-bold tracking-wider">Vendor</div>
+                      <div className="text-slate-900 font-semibold mt-1">{selectedPurchaseOrder.vendor?.name || 'Vendor'}</div>
+                    </div>
+                    <div className="rounded-2xl bg-white border border-slate-200 p-4">
+                      <div className="text-slate-400 text-xs uppercase font-bold tracking-wider">Status</div>
+                      <div className="text-slate-900 font-semibold mt-1 capitalize">{selectedPurchaseOrder.status}</div>
+                    </div>
+                    <div className="rounded-2xl bg-white border border-slate-200 p-4">
+                      <div className="text-slate-400 text-xs uppercase font-bold tracking-wider">Total</div>
+                      <div className="text-slate-900 font-semibold mt-1">{formatCurrency(selectedPurchaseOrder.total_amount)}</div>
+                    </div>
+                    <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:col-span-2">
+                      <div className="text-slate-400 text-xs uppercase font-bold tracking-wider">Date</div>
+                      <div className="text-slate-900 font-semibold mt-1">{formatDate(selectedPurchaseOrder.date)}</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-white border border-slate-200 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-200 font-semibold text-slate-800">Items</div>
+                    <div className="divide-y divide-slate-200">
+                      {(selectedPurchaseOrder.purchase_order_item || []).map((item) => (
+                        <div key={item.id} className="p-4 flex items-start justify-between gap-4">
+                          <div>
+                            <div className="font-semibold text-slate-900">{item.item?.name || selectedPurchaseOrderItemLookup.get(String(item.item_id))?.name || `Item ${item.item_id}`}</div>
+                            <div className="text-sm text-slate-500">{item.item?.sku || selectedPurchaseOrderItemLookup.get(String(item.item_id))?.sku || '-'} • {item.item?.unit || selectedPurchaseOrderItemLookup.get(String(item.item_id))?.unit || 'pcs'}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-semibold text-slate-900">{item.quantity_ordered}</div>
+                            <div className="text-sm text-slate-500">Ordered</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {actionError ? (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {actionError}
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => updatePurchaseOrderStatus('rejected')}
+                      className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                    >
+                      {actionLoading ? 'Processing...' : 'Reject'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => updatePurchaseOrderStatus('acknowledged')}
+                      className="rounded-xl bg-[#38bdf8] px-4 py-3 font-semibold text-white hover:bg-[#0284c7] disabled:opacity-50"
+                    >
+                      {actionLoading ? 'Processing...' : 'Acknowledge'}
+                    </button>
+                  </div>
+                </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

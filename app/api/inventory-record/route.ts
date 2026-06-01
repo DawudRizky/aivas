@@ -39,19 +39,41 @@ export async function POST(req: Request) {
 
   const body = await req.json()
   const supabase = await createClient()
-  const { data, error } = await supabase
+  const itemId = Number(body.item_id)
+  const quantity = Number(body.quantity || 0)
+  const location = body.location || 'permanent storage'
+
+  const { data: existingRecord, error: existingError } = await supabase
     .from('inventory_record')
-    .insert([
-      {
-        item_id: body.item_id,
-        quantity: body.quantity,
-        reserved_qty: body.reserved_qty || 0,
-        location: body.location,
-        last_updated: new Date(),
-        last_counted_at: new Date()
-      }
-    ])
-    .select()
+    .select('id, quantity')
+    .eq('item_id', itemId)
+    .eq('location', location)
+    .maybeSingle()
+
+  if (existingError) {
+    return NextResponse.json({ error: existingError.message }, { status: 500 })
+  }
+
+  const nextQuantity = Number(existingRecord?.quantity || 0) + quantity
+  const payload = {
+    item_id: itemId,
+    quantity: nextQuantity,
+    reserved_qty: body.reserved_qty || 0,
+    location,
+    last_updated: new Date(),
+    last_counted_at: new Date(),
+  }
+
+  const { data, error } = existingRecord
+    ? await supabase
+        .from('inventory_record')
+        .update(payload)
+        .eq('id', existingRecord.id)
+        .select()
+    : await supabase
+        .from('inventory_record')
+        .insert([payload])
+        .select()
 
   if (error) {
     return NextResponse.json(

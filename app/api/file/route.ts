@@ -1,7 +1,19 @@
 import { NextResponse } from 'next/server'
 import fs from 'fs'
-import mime from 'mime'
+import path from 'path'
 import { safeResolve } from '@/lib/safePath'
+
+function getContentType(filePath: string) {
+  const ext = path.extname(filePath).toLowerCase()
+  if (ext === '.pdf') return 'application/pdf'
+  if (ext === '.png') return 'image/png'
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
+  if (ext === '.webp') return 'image/webp'
+  if (ext === '.gif') return 'image/gif'
+  if (ext === '.txt') return 'text/plain; charset=utf-8'
+  if (ext === '.json') return 'application/json; charset=utf-8'
+  return 'application/octet-stream'
+}
 
 // Secure file download example:
 // GET /api/file?name=report.pdf
@@ -24,7 +36,7 @@ export async function GET(req: Request) {
     if (!fs.existsSync(filePath)) return new Response('Not found', { status: 404 })
 
     const file = fs.readFileSync(filePath)
-    const type = mime.getType(filePath) || 'application/octet-stream'
+    const type = getContentType(filePath)
 
     return new Response(file, {
       status: 200,

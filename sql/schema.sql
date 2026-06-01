@@ -36,9 +36,25 @@ CREATE TABLE item (
     unit VARCHAR(50),
     description TEXT,
     unit_price DECIMAL,
+    low_stock_threshold INT DEFAULT 10,
     weight DECIMAL,
-    dimensions VARCHAR(100),
-    category VARCHAR(100)
+    dimensions VARCHAR(100)
+);
+
+-- =====================================
+-- 3A. ITEM VENDOR SOURCE
+-- =====================================
+CREATE TABLE item_vendor_source (
+    id SERIAL PRIMARY KEY,
+    item_id INT NOT NULL,
+    vendor_id INT NOT NULL,
+    unit_price DECIMAL NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (item_id) REFERENCES item(id),
+    FOREIGN KEY (vendor_id) REFERENCES vendor(id),
+    UNIQUE (item_id, vendor_id)
 );
 
 -- =====================================
@@ -48,7 +64,7 @@ CREATE TABLE purchase_order (
     id SERIAL PRIMARY KEY,
     po_number VARCHAR(100) UNIQUE,
     date DATE,
-    status VARCHAR(50),
+    status VARCHAR(50) DEFAULT 'submitted',
     created_by INT,
     vendor_id INT,
     received_by INT,
@@ -83,10 +99,10 @@ CREATE TABLE delivery_order (
     do_number VARCHAR(100) UNIQUE,
     purchase_order_id INT,
     vendor_id INT,
-    status VARCHAR(50),
+    status VARCHAR(50) DEFAULT 'shipped',
     shipped_at TIMESTAMP,
-    carrier VARCHAR(100),
-    tracking_number VARCHAR(100),
+    carrier VARCHAR(100) NOT NULL,
+    tracking_number VARCHAR(100) NOT NULL,
 
     FOREIGN KEY (purchase_order_id) REFERENCES purchase_order(id),
     FOREIGN KEY (vendor_id) REFERENCES vendor(id)
@@ -98,11 +114,13 @@ CREATE TABLE delivery_order (
 CREATE TABLE delivery_order_item (
     id SERIAL PRIMARY KEY,
     delivery_order_id INT,
-    item_id INT,
-    quantity INT,
+    box_number INT NOT NULL,
+    item_id INT NOT NULL,
+    quantity INT NOT NULL,
 
     FOREIGN KEY (delivery_order_id) REFERENCES delivery_order(id),
-    FOREIGN KEY (item_id) REFERENCES item(id)
+    FOREIGN KEY (item_id) REFERENCES item(id),
+    UNIQUE (delivery_order_id, box_number)
 );
 
 -- =====================================
@@ -115,14 +133,19 @@ CREATE TABLE qr_code (
     status VARCHAR(50),
     printed_by INT,
 
+    delivery_order_item_id INT NOT NULL,
+    box_number INT,
+    quantity INT,
     item_id INT,
     purchase_order_id INT,
     delivery_order_id INT,
 
     FOREIGN KEY (printed_by) REFERENCES users(id),
+    FOREIGN KEY (delivery_order_item_id) REFERENCES delivery_order_item(id),
     FOREIGN KEY (item_id) REFERENCES item(id),
     FOREIGN KEY (purchase_order_id) REFERENCES purchase_order(id),
-    FOREIGN KEY (delivery_order_id) REFERENCES delivery_order(id)
+    FOREIGN KEY (delivery_order_id) REFERENCES delivery_order(id),
+    UNIQUE (delivery_order_item_id)
 );
 
 -- =====================================

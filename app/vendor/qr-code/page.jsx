@@ -1,115 +1,205 @@
 "use client";
 
-export default function QRCodeShipmentPage() {
-  const dummyBoxes = [
-    {
-      id: "BOX-001",
-      items: 3,
-      date: "1/4/2026",
-      qrText: "AIVAS-SHP2026001-BOX001"
-    },
-    {
-      id: "BOX-001", // According to the screenshot dummy data
-      items: 3,
-      date: "1/4/2026",
-      qrText: "AIVAS-SHP2026001-BOX001"
+import { useEffect, useMemo, useState } from "react";
+import QRCode from "qrcode";
+import {
+  dedupeQrRows,
+  resolveBoxLabel,
+  resolveDeliveryOrderOptions,
+  resolveItemName,
+  resolveQuantity,
+} from "./qr-utils";
+
+export default function VendorQrCodePage() {
+  const [qrRows, setQrRows] = useState([]);
+  const [selectedDeliveryOrderId, setSelectedDeliveryOrderId] = useState("");
+  const [qrDataUrls, setQrDataUrls] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const loadQrRows = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/qr-code", { cache: "no-store" });
+      const data = await response.json().catch(() => []);
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Gagal memuat QR codes");
+      }
+
+      setQrRows(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err?.message || "Gagal memuat QR codes");
+      setQrRows([]);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  useEffect(() => {
+    loadQrRows();
+  }, []);
+
+  const uniqueQrRows = useMemo(() => dedupeQrRows(qrRows), [qrRows]);
+
+  const deliveryOrderOptions = useMemo(() => resolveDeliveryOrderOptions(uniqueQrRows), [uniqueQrRows]);
+
+  useEffect(() => {
+    if (!deliveryOrderOptions.length) {
+      setSelectedDeliveryOrderId("");
+      return;
+    }
+
+    setSelectedDeliveryOrderId((currentValue) => {
+      if (!currentValue) return String(deliveryOrderOptions[0].id);
+
+      const stillExists = deliveryOrderOptions.some((option) => String(option.id) === String(currentValue));
+      return stillExists ? currentValue : String(deliveryOrderOptions[0].id);
+    });
+  }, [deliveryOrderOptions]);
+
+  const selectedQrRows = useMemo(() => {
+    const targetDoId = Number(selectedDeliveryOrderId);
+    if (!Number.isFinite(targetDoId) || targetDoId <= 0) return [];
+
+    return uniqueQrRows
+      .filter((row) => Number(row?.delivery_order_id || row?.delivery_order?.id) === targetDoId)
+      .sort((left, right) => {
+        const leftBox = Number(left?.box_number || 0);
+        const rightBox = Number(right?.box_number || 0);
+        if (leftBox !== rightBox) return leftBox - rightBox;
+        return Number(left?.id || 0) - Number(right?.id || 0);
+      });
+  }, [selectedDeliveryOrderId, uniqueQrRows]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const generateQrImages = async () => {
+      if (!selectedQrRows.length) {
+        setQrDataUrls({});
+        return;
+      }
+
+      const entries = await Promise.all(
+        selectedQrRows.map(async (row) => {
+          const value = String(row?.code || "");
+          if (!value) {
+            return [String(row.id), ""];
+          }
+
+          const dataUrl = await QRCode.toDataURL(value, {
+            width: 260,
+            margin: 1,
+            errorCorrectionLevel: "M",
+          });
+
+          return [String(row.id), dataUrl];
+        })
+      );
+
+      if (cancelled) return;
+      setQrDataUrls(Object.fromEntries(entries));
+    };
+
+    generateQrImages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedQrRows]);
+
+  const handleGenerateDocument = () => {
+    if (!selectedDeliveryOrderId) return;
+
+    window.location.href = `/api/qr-code/document?delivery_order_id=${selectedDeliveryOrderId}`;
+  };
 
   return (
-    <div className="space-y-6 text-black">
-      {/* Header Section */}
+    <div className="space-y-6 text-black relative">
       <div>
-        <h1 className="text-3xl font-bold text-slate-900">QR Code Shipment</h1>
-        <p className="text-gray-500 text-sm mt-1">SHP-2026-001 • PT. Filkom Sejahtera</p>
+        <h1 className="text-3xl font-bold text-slate-900 mt-2">QR Viewer</h1>
+        <p className="text-sm text-slate-500 mt-2">Pilih DO untuk melihat semua QR per box dan cetak dokumen A4 (6 QR per halaman).</p>
       </div>
 
-      {/* Main QR Card */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] p-8 max-w-2xl mx-auto mt-8 flex flex-col items-center">
-        
-        <div className="w-full flex items-center gap-2 mb-6 text-slate-800">
-          <img 
-            src="/ic_qrblue.jpg" 
-            alt="QR Icon" 
-            className="w-5 h-5 object-contain" 
-          />
-          <h2 className="font-bold text-sm">Shipment QR Code</h2>
+      {error ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
         </div>
+      ) : null}
 
-        {/* Placeholder QR */}
-        <div className="w-56 h-56 bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-center shadow-sm">
-          {/* gambar generate qr */}
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-full h-full text-slate-800">
-             <path fillRule="evenodd" d="M3 4.5A1.5 1.5 0 014.5 3h4.5A1.5 1.5 0 0110.5 4.5v4.5A1.5 1.5 0 019 10.5H4.5A1.5 1.5 0 013 9V4.5zM4.5 4.5v4.5h4.5V4.5H4.5z" clipRule="evenodd" />
-             <path fillRule="evenodd" d="M13.5 4.5A1.5 1.5 0 0115 3h4.5A1.5 1.5 0 0121 4.5v4.5a1.5 1.5 0 01-1.5 1.5H15a1.5 1.5 0 01-1.5-1.5V4.5zM15 4.5v4.5h4.5V4.5H15z" clipRule="evenodd" />
-             <path fillRule="evenodd" d="M3 15A1.5 1.5 0 014.5 13.5h4.5A1.5 1.5 0 0110.5 15v4.5A1.5 1.5 0 019 21H4.5A1.5 1.5 0 013 19.5V15zM4.5 15v4.5h4.5V15H4.5z" clipRule="evenodd" />
-             <path d="M15 13.5H13.5V15H15v-1.5zM18 13.5h-1.5V15H18v-1.5zM21 13.5h-1.5V15H21v-1.5zM15 16.5H13.5V18H15v-1.5zM16.5 16.5h1.5V15h-1.5v1.5zM18 16.5v1.5h1.5v-1.5H18zM19.5 18h1.5v-1.5h-1.5V18zM15 19.5v1.5h1.5v-1.5H15zM18 19.5H16.5v1.5h1.5v-1.5zM21 19.5h-1.5v1.5H21v-1.5z" />
-             <rect x="6" y="6" width="1.5" height="1.5" />
-             <rect x="16.5" y="6" width="1.5" height="1.5" />
-             <rect x="6" y="16.5" width="1.5" height="1.5" />
-          </svg>
-        </div>
+      <div className="no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_10px_40px_-24px_rgba(15,23,42,0.35)]">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <label className="block w-full md:max-w-md">
+            <span className="text-sm font-semibold text-slate-700">Delivery Order</span>
+            <select
+              value={selectedDeliveryOrderId}
+              onChange={(event) => setSelectedDeliveryOrderId(event.target.value)}
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]"
+            >
+              {deliveryOrderOptions.length === 0 ? <option value="">Tidak ada DO dengan QR</option> : null}
+              {deliveryOrderOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.doNumber} (PO {option.poNumber})
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <div className="text-center mt-6 mb-8">
-          <p className="font-bold text-slate-500 tracking-wider text-sm mb-1">AIVAS-SHP2026001-BOX001</p>
-          <p className="text-xs text-slate-400">Tempel QR Code ini pada box fisik</p>
-        </div>
-
-        <div className="flex gap-4 w-full max-w-sm">
-          <button className="flex-1 flex justify-center items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg py-2.5 text-sm font-bold text-slate-600 transition-colors shadow-sm">
-            <img 
-              src="/ic_download.jpg" 
-              alt="Download Icon" 
-              className="w-5 h-5 object-contain" 
-            />
-            Download
-          </button>
-          <button 
-            onClick={() => window.print()}
-            className="flex-1 flex justify-center items-center gap-2 bg-[#38bdf8] hover:bg-[#0284c7] rounded-lg py-2.5 text-sm font-bold text-white transition-colors shadow-sm shadow-blue-500/20"
-          >
-            <img 
-              src="/ic_print.jpg" 
-              alt="Print Icon" 
-              className="w-5 h-5 object-contain" 
-            />
-            Cetak
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={loadQrRows}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-[#38bdf8] hover:text-[#0284c7]"
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerateDocument}
+              disabled={selectedQrRows.length === 0}
+              className="rounded-xl bg-[#38bdf8] px-4 py-3 text-sm font-bold text-white hover:bg-[#0284c7] disabled:opacity-50"
+            >
+              Download PDF Document
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* QR Code Box List */}
-      <div className="mt-8 max-w-2xl mx-auto space-y-3">
-        <h3 className="text-sm font-bold text-slate-800 mb-3">QR Code Box</h3>
-        {dummyBoxes.map((box, index) => (
-          <div key={index} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between cursor-pointer hover:shadow-md transition-shadow group">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center transition-colors group-hover:bg-blue-100">
-                <img 
-                  src="/ic_qrblue.jpg" 
-                  alt="QR Box Icon" 
-                  className="w-6 h-6 object-contain" 
-                />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-800 text-[15px]">{box.id}</h4>
-                <p className="text-[11px] text-slate-400 font-medium mb-1">{box.items} Item • {box.date}</p>
-                <p className="text-xs font-bold text-slate-400 tracking-wider">{box.qrText}</p>
-              </div>
-            </div>
-            
-            {/* Button Arrow */}
-            <div className="mr-2 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
-              <img 
-                src="/ic_arrow.jpg" 
-                alt="Arrow Right" 
-                className="w-5 h-5 object-contain" 
-              />
+      {loading ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-500">Loading QR data...</div>
+      ) : selectedQrRows.length === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-500">Tidak ada QR untuk DO yang dipilih.</div>
+      ) : (
+        <div className="space-y-6">
+          <div className="no-print rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_10px_40px_-24px_rgba(15,23,42,0.35)]">
+            <div className="mb-3 text-sm font-semibold text-slate-800">Web Viewer</div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {selectedQrRows.map((row, index) => {
+                const itemName = resolveItemName(row);
+                const boxLabel = resolveBoxLabel(row, index);
+                const quantity = resolveQuantity(row);
+                return (
+                  <div key={row.id || `${row.code}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-lg border border-slate-200 bg-white p-3 text-center">
+                      {qrDataUrls[String(row.id)] ? (
+                        <img src={qrDataUrls[String(row.id)]} alt={`QR ${row.code}`} className="h-32 w-32 object-contain" />
+                      ) : (
+                        <div className="text-xs text-slate-400">Generating QR...</div>
+                      )}
+                      <div className="mt-3 text-xs font-semibold text-slate-900">{boxLabel}</div>
+                      <div className="mt-1 text-xs font-medium text-slate-700">{itemName}</div>
+                      <div className="text-xs text-slate-500">Qty: {quantity}</div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        ))}
-      </div>
-      
+        </div>
+      )}
     </div>
   );
 }

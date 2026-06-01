@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('*')
+      .select('*, vendor(id,name)')
       .eq('email', email)
       .single()
 
@@ -63,11 +63,23 @@ export async function POST(req: Request) {
       )
     }
 
+    if (user.role === 'vendor' && (!user.vendor_id || !user.vendor)) {
+      return NextResponse.json(
+        {
+          error: 'Akun vendor harus terhubung ke vendor_id'
+        },
+        {
+          status: 403
+        }
+      )
+    }
+
     const token = jwt.sign(
       {
         id: user.id,
         email: user.email,
-        role: user.role
+        role: user.role,
+        vendor_id: user.vendor_id ?? null
       },
       process.env.JWT_SECRET!,
       {
@@ -88,7 +100,9 @@ export async function POST(req: Request) {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        vendor_id: user.vendor_id ?? null,
+        vendor: user.vendor ?? null
       }
     })
 

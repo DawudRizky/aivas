@@ -48,6 +48,7 @@ export async function POST(req: Request) {
     .insert([
       {
         delivery_order_id: body.delivery_order_id,
+        box_number: body.box_number,
         item_id: body.item_id,
         quantity: body.quantity
       }

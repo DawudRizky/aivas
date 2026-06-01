@@ -3,6 +3,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getUserFromReq } from '@/lib/auth'
+import { generateNextSku } from '@/lib/sku'
 
 export async function GET(req: Request) {
   const user = await getUserFromReq(req)
@@ -31,18 +32,19 @@ export async function POST(req: Request) {
 
     const body = await req.json()
     const supabase = await createClient()
+    const generatedSku = body.sku || await generateNextSku(supabase)
     const { data, error } = await supabase
       .from('item')
       .insert([
         {
-          sku: body.sku,
+          sku: generatedSku,
           name: body.name,
           unit: body.unit,
           description: body.description,
           unit_price: body.unit_price,
+          low_stock_threshold: body.low_stock_threshold ?? 10,
           weight: body.weight,
-          dimensions: body.dimensions,
-          category: body.category
+          dimensions: body.dimensions
         }
       ])
       .select()
@@ -52,7 +54,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ message: 'Item berhasil dibuat', data })
-  } catch (err) {
+  } catch {
     return new Response('Forbidden', { status: 403 })
   }
 }

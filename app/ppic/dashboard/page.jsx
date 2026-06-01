@@ -1,108 +1,33 @@
 "use client";
-
-
 import { useEffect, useState } from "react";
 
 export default function PpicDashboardPage() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  const [totalShipments, setTotalShipments] = useState(0);
-  const [verifiedCount, setVerifiedCount] = useState(0);
-  const [matchRate, setMatchRate] = useState(0);
-  const [openTickets, setOpenTickets] = useState(0);
-
-  const [distMatch, setDistMatch] = useState(0);
-  const [distMismatch, setDistMismatch] = useState(0);
-  const [distMissing, setDistMissing] = useState(0);
-  const [distOver, setDistOver] = useState(0);
-  const [vendorsData, setVendorsData] = useState([]);
+  const [deliveryOrders, setDeliveryOrders] = useState([]);
+  const [discrepancyTickets, setDiscrepancyTickets] = useState([]);
+  const [vendors, setVendors] = useState([]);
 
   useEffect(() => {
     let mounted = true;
-    async function load() {
-      setLoading(true);
-      try {
-        const [dosRes, scansRes, ticketsRes] = await Promise.all([
-          fetch('/api/delivery-order'),
-          fetch('/api/inbound-scan'),
-          fetch('/api/discrepancy-ticket')
-        ]);
 
-        if (!dosRes.ok || !scansRes.ok || !ticketsRes.ok) {
-          throw new Error('Failed to fetch metrics')
-        }
+    Promise.all([
+      fetch('/api/delivery-order').then(r => r.json()).catch(() => []),
+      fetch('/api/discrepancy-ticket').then(r => r.json()).catch(() => []),
+      fetch('/api/vendor').then(r => r.json()).catch(() => []),
+    ]).then(([dos, tickets, vends]) => {
+      if (!mounted) return;
+      setDeliveryOrders(Array.isArray(dos) ? dos : []);
+      setDiscrepancyTickets(Array.isArray(tickets) ? tickets : []);
+      setVendors(Array.isArray(vends) ? vends : []);
+    }).catch(() => {});
 
-        const [dos, scans, tickets, vendors, qrCodes] = await Promise.all([dosRes.json(), scansRes.json(), ticketsRes.json(), fetch('/api/vendor').then(r=>r.json()), fetch('/api/qr-code').then(r=>r.json())]);
-
-        if (!mounted) return;
-
-        const totalD = Array.isArray(dos) ? dos.length : 0;
-        const totalScans = Array.isArray(scans) ? scans.length : 0;
-        const totalTickets = Array.isArray(tickets) ? tickets.length : 0;
-
-        setTotalShipments(totalD);
-
-        const verified = Array.isArray(scans) ? scans.filter(s => (s.status || '').toLowerCase() === 'received').length : 0;
-        setVerifiedCount(verified);
-
-        const match = totalScans > 0 ? Math.max(0, ((totalScans - totalTickets) / totalScans) * 100) : 0;
-        setMatchRate(Number(match.toFixed(1)));
-
-        const open = Array.isArray(tickets) ? tickets.filter(t => (t.status || '').toLowerCase() === 'open').length : 0;
-        setOpenTickets(open);
-
-        // distribution heuristics
-        const dm = Math.max(0, totalScans - totalTickets);
-        const dmm = totalTickets;
-        const dmissing = Array.isArray(tickets) ? tickets.filter(t => (t.severity || '').toLowerCase() === 'missing').length : 0;
-        const dover = Array.isArray(tickets) ? tickets.filter(t => (t.severity || '').toLowerCase() === 'over').length : 0;
-
-        setDistMatch(dm);
-        setDistMismatch(dmm);
-        setDistMissing(dmissing);
-        setDistOver(dover);
-
-        // compute vendor performance
-        const vendorList = Array.isArray(vendors) ? vendors : [];
-        const qrList = Array.isArray(qrCodes) ? qrCodes : [];
-        const vendorMetrics = vendorList.map(v => {
-          const shipments = Array.isArray(dos) ? dos.filter(d => Number(d.vendor_id) === Number(v.id)).length : 0;
-          // count tickets related to this vendor by tracing ticket -> inbound_scan -> qr_code -> delivery_order
-          let ticketCount = 0;
-          for (const t of (Array.isArray(tickets) ? tickets : [])) {
-            const inbId = t.inbound_scan_id ?? (t.inbound_scan && t.inbound_scan.id);
-            if (!inbId) continue;
-            const inb = Array.isArray(scans) ? scans.find(s => Number(s.id) === Number(inbId)) : null;
-            const qrId = inb?.qr_code_id;
-            const qr = qrList.find(q => Number(q.id) === Number(qrId));
-            const doId = qr?.delivery_order_id;
-            const delivery = Array.isArray(dos) ? dos.find(d => Number(d.id) === Number(doId)) : null;
-            if (delivery && Number(delivery.vendor_id) === Number(v.id)) ticketCount++;
-          }
-
-          const matches = Math.max(0, shipments - ticketCount);
-          const score = shipments ? Math.round((matches / shipments) * 100) : 0;
-          return { ...v, shipments, matches, discrepancies: ticketCount, score };
-        });
-
-        setVendorsData(vendorMetrics);
-      } catch (err) {
-        if (mounted) setError(err.message || 'Failed to load metrics');
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-
-    load();
-    return () => { mounted = false; };
+    return () => { mounted = false };
   }, []);
 
-  function pct(part, total) {
-    if (!total) return '0%';
-    return `${Math.round((part / total) * 100)}%`;
-  }
-
+  const totalShipments = deliveryOrders.length;
+  const verifiedCount = deliveryOrders.filter(d => ['verified','received','delivered'].includes((d.status || '').toLowerCase())).length;
+  const ticketCount = discrepancyTickets.length;
+  const matchRate = totalShipments > 0 ? Math.round(((totalShipments - ticketCount) / totalShipments) * 1000) / 10 : 100;
+  const openTickets = discrepancyTickets.filter(t => !(t.status && t.status.toLowerCase() === 'resolved')).length;
   return (
     <div className="space-y-6 text-black">
       {/* Header Section */}
@@ -110,7 +35,7 @@ export default function PpicDashboardPage() {
         <h1 className="text-3xl font-bold text-slate-900">Dashboard Analytics</h1>
         <p className="text-gray-500 text-sm mt-1">Monitoring performa supply chain & discrepancy secara real-time</p>
       </div>
-
+    
       {/* 4 Cards (Metrics) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Card 1 */}
@@ -125,11 +50,11 @@ export default function PpicDashboardPage() {
                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 mr-0.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
               </svg>
-              {loading ? '—' : pct(verifiedCount, totalShipments)}
+              12%
             </div>
           </div>
-          <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{loading ? '—' : totalShipments}</h3>
+            <div>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{totalShipments}</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Total Shipment</p>
           </div>
         </div>
@@ -146,11 +71,11 @@ export default function PpicDashboardPage() {
                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 mr-0.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
               </svg>
-              {loading ? '—' : verifiedCount}
+              89%
             </div>
           </div>
           <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{loading ? '—' : verifiedCount}</h3>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{verifiedCount}</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Terverifikasi</p>
           </div>
         </div>
@@ -167,11 +92,11 @@ export default function PpicDashboardPage() {
                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 mr-0.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
               </svg>
-              {loading ? '—' : `${matchRate}%`}
+              2.3%
             </div>
           </div>
           <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{loading ? '—' : `${matchRate}%`}</h3>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{matchRate}%</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Match Rate</p>
           </div>
         </div>
@@ -188,11 +113,11 @@ export default function PpicDashboardPage() {
                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 mr-0.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
               </svg>
-              {loading ? '—' : openTickets}
+              3
             </div>
           </div>
           <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{loading ? '—' : openTickets}</h3>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{openTickets}</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Open Tickets</p>
           </div>
         </div>
@@ -215,40 +140,40 @@ export default function PpicDashboardPage() {
             <div>
               <div className="flex justify-between items-end mb-1.5">
                 <span className="text-sm font-semibold text-slate-700">Match</span>
-                <span className="text-sm font-bold text-slate-800">{distMatch} <span className="text-xs text-slate-400 font-medium">({loading ? '—' : pct(distMatch, distMatch + distMismatch + distMissing + distOver)})</span></span>
+                <span className="text-sm font-bold text-slate-800">33 <span className="text-xs text-slate-400 font-medium">(78.6%)</span></span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-emerald-500 h-2 rounded-full" style={{ width: loading ? '0%' : pct(distMatch, distMatch + distMismatch + distMissing + distOver) }}></div>
+                <div className="bg-emerald-500 h-2 rounded-full" style={{ width: '78.6%' }}></div>
               </div>
             </div>
             {/* Mismatch */}
             <div>
               <div className="flex justify-between items-end mb-1.5">
                 <span className="text-sm font-semibold text-slate-700">Mismatch</span>
-                <span className="text-sm font-bold text-slate-800">{distMismatch} <span className="text-xs text-slate-400 font-medium">({loading ? '—' : pct(distMismatch, distMatch + distMismatch + distMissing + distOver)})</span></span>
+                <span className="text-sm font-bold text-slate-800">5 <span className="text-xs text-slate-400 font-medium">(11.9%)</span></span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-rose-500 h-2 rounded-full" style={{ width: loading ? '0%' : pct(distMismatch, distMatch + distMismatch + distMissing + distOver) }}></div>
+                <div className="bg-rose-500 h-2 rounded-full" style={{ width: '11.9%' }}></div>
               </div>
             </div>
             {/* Missing */}
             <div>
               <div className="flex justify-between items-end mb-1.5">
                 <span className="text-sm font-semibold text-slate-700">Missing</span>
-                <span className="text-sm font-bold text-slate-800">{distMissing} <span className="text-xs text-slate-400 font-medium">({loading ? '—' : pct(distMissing, distMatch + distMismatch + distMissing + distOver)})</span></span>
+                <span className="text-sm font-bold text-slate-800">3 <span className="text-xs text-slate-400 font-medium">(7.1%)</span></span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-amber-400 h-2 rounded-full" style={{ width: loading ? '0%' : pct(distMissing, distMatch + distMismatch + distMissing + distOver) }}></div>
+                <div className="bg-amber-400 h-2 rounded-full" style={{ width: '7.1%' }}></div>
               </div>
             </div>
             {/* Over */}
             <div>
               <div className="flex justify-between items-end mb-1.5">
                 <span className="text-sm font-semibold text-slate-700">Over</span>
-                <span className="text-sm font-bold text-slate-800">{distOver} <span className="text-xs text-slate-400 font-medium">({loading ? '—' : pct(distOver, distMatch + distMismatch + distMissing + distOver)})</span></span>
+                <span className="text-sm font-bold text-slate-800">1 <span className="text-xs text-slate-400 font-medium">(2.4%)</span></span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-blue-500 h-2 rounded-full" style={{ width: loading ? '0%' : pct(distOver, distMatch + distMismatch + distMissing + distOver) }}></div>
+                <div className="bg-blue-500 h-2 rounded-full" style={{ width: '2.4%' }}></div>
               </div>
             </div>
           </div>
@@ -263,27 +188,34 @@ export default function PpicDashboardPage() {
             <h3 className="text-base font-bold text-slate-800">Vendor Performance</h3>
           </div>
 
-          <div className="space-y-4 flex-1">
-            {vendorsData.length === 0 && (
-              <div className="text-sm text-slate-500">No vendor data available</div>
-            )}
+              <div className="space-y-4 flex-1">
+            {vendors.map((v) => {
+              const shipments = deliveryOrders.filter(d => (d.vendor?.id || d.vendor_id) === v.id).length;
+              // approximate discrepancy count per vendor by counting tickets whose inbound_scan?.status mentions vendor indirectly (best-effort)
+              const discrepancies = discrepancyTickets.filter(t => {
+                try {
+                  return (t.inbound_scan && t.inbound_scan.vendor_id && t.inbound_scan.vendor_id === v.id);
+                } catch { return false }
+              }).length;
+              const score = shipments > 0 ? Math.round(((shipments - discrepancies) / shipments) * 100) : 100;
 
-            {vendorsData.slice(0,3).map((v) => (
-              <div key={v.id} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-bold text-slate-800">{v.name}</span>
-                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">Score: {v.score}%</span>
+              return (
+                <div key={v.id} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-bold text-slate-800">{v.name}</span>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">Score: {score}%</span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-1.5 mb-2">
+                    <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${score}%` }}></div>
+                  </div>
+                  <div className="flex gap-3 text-[10px] text-slate-500 font-medium">
+                    <span>{shipments} shipment</span>
+                    <span className="text-emerald-500">{Math.max(0, shipments - discrepancies)} match</span>
+                    <span className="text-rose-500">{discrepancies} discrepancy</span>
+                  </div>
                 </div>
-                <div className="w-full bg-slate-200 rounded-full h-1.5 mb-2">
-                  <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${v.score}%` }}></div>
-                </div>
-                <div className="flex gap-3 text-[10px] text-slate-500 font-medium">
-                  <span>{v.shipments} shipment</span>
-                  <span className="text-emerald-500">{v.matches} match</span>
-                  <span className="text-rose-500">{v.discrepancies} discrepancy</span>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 
@@ -298,14 +230,39 @@ export default function PpicDashboardPage() {
           <h3 className="text-base font-bold text-slate-800">Ticket Discrepancy Terbaru</h3>
         </div>
         <div className="p-2 space-y-1">
-          {/* TODO: consider fetching and listing latest tickets here */}
+          {/* Ticket 1 */}
           <div className="p-3 hover:bg-slate-50 rounded-lg transition-colors flex items-center justify-between group">
             <div>
-              <h4 className="text-sm font-bold text-slate-800">{loading ? '—' : `${openTickets > 0 ? `Last ${openTickets} open tickets` : 'No open tickets'}`}</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">Overview</p>
+              <h4 className="text-sm font-bold text-slate-800">TKT-2026-001</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5">PT. Maju Komponen • SHP-2026-001</p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded bg-rose-50 text-rose-600 text-[10px] font-bold tracking-wide uppercase">Summary</span>
+              <span className="px-2.5 py-1 rounded bg-rose-50 text-rose-600 text-[10px] font-bold tracking-wide uppercase">Mismatch</span>
+              <span className="px-2.5 py-1 rounded bg-slate-100 text-slate-600 text-[10px] font-bold tracking-wide uppercase">Open</span>
+            </div>
+          </div>
+          
+          {/* Ticket 2 */}
+          <div className="p-3 hover:bg-slate-50 rounded-lg transition-colors flex items-center justify-between group">
+            <div>
+              <h4 className="text-sm font-bold text-slate-800">TKT-2026-002</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5">CV. Sejahtera Parts • SHP-2026-002</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded bg-amber-50 text-amber-600 text-[10px] font-bold tracking-wide uppercase">Missing</span>
+              <span className="px-2.5 py-1 rounded bg-amber-50 text-amber-600 text-[10px] font-bold tracking-wide uppercase">Hold</span>
+            </div>
+          </div>
+
+          {/* Ticket 3 */}
+          <div className="p-3 hover:bg-slate-50 rounded-lg transition-colors flex items-center justify-between group">
+            <div>
+              <h4 className="text-sm font-bold text-slate-800">TKT-2026-003</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5">PT. Maju Komponen • SHP-2026-003</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded bg-blue-50 text-blue-600 text-[10px] font-bold tracking-wide uppercase">Over</span>
+              <span className="px-2.5 py-1 rounded bg-emerald-50 text-emerald-600 text-[10px] font-bold tracking-wide uppercase">Resolved</span>
             </div>
           </div>
         </div>
