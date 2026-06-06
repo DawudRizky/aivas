@@ -137,6 +137,7 @@ export default function InboundScannerPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [isLandscapeMobile, setIsLandscapeMobile] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [saveNotice, setSaveNotice] = useState("");
 
   // Data Item from QR
@@ -171,6 +172,7 @@ export default function InboundScannerPage() {
     const syncLandscapeMobile = () => {
       const mobile = window.innerWidth < 1024;
       const landscape = window.innerWidth > window.innerHeight;
+      setIsMobileViewport(mobile);
       setIsLandscapeMobile(mobile && landscape);
     };
     syncLandscapeMobile();
@@ -598,6 +600,8 @@ export default function InboundScannerPage() {
     window.dispatchEvent(new Event("aivas-toggle-admin-sidebar"));
   };
 
+  const isPortraitMobile = isMobileViewport && !isLandscapeMobile;
+
   return (
     <>
       {saveNotice && (
@@ -605,9 +609,9 @@ export default function InboundScannerPage() {
           {saveNotice}
         </div>
       )}
-      <div className="h-[100dvh] w-[100dvw] overflow-hidden bg-[#050b16] text-white flex">
+      <div className={`h-[100dvh] w-[100dvw] overflow-hidden bg-[#050b16] text-white flex ${isLandscapeMobile ? "flex-row" : "flex-col lg:flex-row"}`}>
         {/* LEFT BOX: Camera feed with overlay controls */}
-        <section className="relative flex-1 min-w-0 h-full overflow-hidden">
+        <section className={`relative min-w-0 overflow-hidden ${isLandscapeMobile ? "h-full flex-1" : "h-[48dvh] w-full lg:h-full lg:flex-1"}`}>
           {/* Camera feed - fits inside the box */}
           {cameraError ? (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-5 text-center">
@@ -654,7 +658,9 @@ export default function InboundScannerPage() {
         </section>
 
         {/* RIGHT BOX: Keypad & buttons - no rounded corners, hugs device edge */}
-        <section className={`relative h-full w-[45vw] max-w-[280px] flex flex-col bg-white text-slate-900 overflow-y-auto ${cameraMode === "qr" ? "pointer-events-none" : ""}`}>
+        <section className={`relative flex flex-col bg-white text-slate-900 overflow-y-auto ${
+          isLandscapeMobile ? "h-full w-[45vw] max-w-[280px]" : "h-[52dvh] w-full max-w-none lg:h-full lg:w-[45vw] lg:max-w-[280px]"
+        } ${cameraMode === "qr" ? "pointer-events-none" : ""}`}>
           {cameraMode === "qr" && (
             <div className="absolute inset-0 z-30 bg-white/85 backdrop-blur-[1px] flex items-center justify-center px-3 text-center">
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
