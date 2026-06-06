@@ -1,11 +1,18 @@
 "use client";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { consumeLoggedOutRedirect } from "@/lib/logoutState";
+
+const HOME_FOR_ROLE = {
+  supervisor: "/supervisor",
+  admin: "/admin",
+  ppic: "/ppic",
+  it: "/it",
+  vendor: "/vendor",
+};
 
 function LoginContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const logoutFlag = searchParams.get("loggedOut");
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -14,20 +21,56 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [formKey, setFormKey] = useState(0);
 
+  const resetLoginForm = useCallback(() => {
+    setEmail("");
+    setPassword("");
+    setShowPassword(false);
+    setError("");
+    setLoading(false);
+    setFormKey((value) => value + 1);
+  }, []);
+
   useEffect(() => {
-    if (!logoutFlag) return;
+    let active = true;
+    const isLoggedOutRedirect = consumeLoggedOutRedirect();
 
-    const timer = window.setTimeout(() => {
-      setEmail("");
-      setPassword("");
-      setShowPassword(false);
-      setError("");
-      setLoading(false);
-      setFormKey((value) => value + 1);
-    }, 50);
+    const redirectAuthenticatedUser = async () => {
+      try {
+        const res = await fetch("/api/auth/me", { cache: "no-store" });
+        if (!res.ok) return;
 
-    return () => window.clearTimeout(timer);
-  }, [logoutFlag]);
+        const data = await res.json().catch(() => ({}));
+        const home = HOME_FOR_ROLE[data.user?.role];
+
+        if (active && home) {
+          router.replace(home);
+        }
+      } catch {
+        // Stay on the login page when the session check is unavailable.
+      }
+    };
+
+    if (!isLoggedOutRedirect) {
+      const handlePageShow = () => {
+        resetLoginForm();
+        redirectAuthenticatedUser();
+      };
+
+      window.addEventListener("pageshow", handlePageShow);
+      redirectAuthenticatedUser();
+
+      return () => {
+        active = false;
+        window.removeEventListener("pageshow", handlePageShow);
+      };
+    }
+
+    resetLoginForm();
+
+    return () => {
+      active = false;
+    };
+  }, [resetLoginForm, router]);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -46,12 +89,8 @@ function LoginContent() {
         return data
       })
       .then((data) => {
-        const role = data.user?.role
-        if (role === 'supervisor') router.push('/supervisor')
-        else if (role === 'admin') router.push('/admin')
-        else if (role === 'ppic') router.push('/ppic')
-        else if (role === 'it') router.push('/it')
-        else if (role === 'vendor') router.push('/vendor')
+        const home = HOME_FOR_ROLE[data.user?.role]
+        if (home) router.push(home)
         else throw new Error('Role user tidak dikenali')
       })
       .catch((err) => {
