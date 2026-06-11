@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 
 const statusOrder = {
@@ -626,30 +627,33 @@ export default function ShipmentClient() {
         )}
       </div>
 
-      {selectedPurchaseOrder ? (
+      {selectedPurchaseOrder && typeof document !== "undefined" ? createPortal(
         <div
-          className="fixed inset-0 z-[70] bg-slate-950/55 backdrop-blur-sm px-4 py-6 flex items-center justify-center lg:left-64 lg:w-[calc(100vw-16rem)]"
+          className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-slate-950/55 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6"
           onClick={closePurchaseOrderPopup}
         >
           <div
-            className="w-full max-w-6xl rounded-[2rem] bg-white shadow-2xl border border-slate-200 overflow-hidden"
+            className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-3rem)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50/80">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-slate-50/95 px-6 py-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Create DO</h2>
               </div>
               <button
                 type="button"
                 onClick={closePurchaseOrderPopup}
-                className="h-10 w-10 rounded-full hover:bg-slate-200 text-slate-500 hover:text-slate-800"
+                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Close modal"
               >
-                X
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
-            <div className="grid gap-0 lg:grid-cols-[1fr_1.05fr]">
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid gap-0 lg:grid-cols-[1fr_1.05fr]">
               <section className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/70 p-6 md:p-8">
                 <div className="space-y-5">
                   <div className="grid gap-3 sm:grid-cols-2 text-sm">
@@ -715,7 +719,7 @@ export default function ShipmentClient() {
                       type="text"
                       value={doNumber}
                       readOnly
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
                     />
                   </label>
 
@@ -726,7 +730,7 @@ export default function ShipmentClient() {
                         type="text"
                         value={carrier}
                         onChange={(event) => setCarrier(event.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]"
                       />
                     </label>
 
@@ -736,7 +740,7 @@ export default function ShipmentClient() {
                         type="text"
                         value={trackingNumber}
                         onChange={(event) => setTrackingNumber(event.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]"
                       />
                     </label>
                   </div>
@@ -778,7 +782,7 @@ export default function ShipmentClient() {
                               <select
                                 value={item.item_id || ""}
                                 onChange={(event) => handleItemChange(index, event.target.value)}
-                                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]"
+                                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]"
                               >
                                 <option value="">Pilih item</option>
                                 {selectedPurchaseOrderItems.map((orderItem) => {
@@ -800,7 +804,7 @@ export default function ShipmentClient() {
                                 type="text"
                                 value={`${purchaseOrderItemById.get(Number(item.item_id))?.sku || "-"} • ${purchaseOrderItemById.get(Number(item.item_id))?.unit || "pcs"}`}
                                 readOnly
-                                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900"
                               />
                             </label>
 
@@ -812,7 +816,7 @@ export default function ShipmentClient() {
                                 inputMode="numeric"
                                 value={item.qty}
                                 onChange={(event) => handleQtyChange(index, event.target.value)}
-                                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                               />
                             </label>
                           </div>
@@ -870,9 +874,11 @@ export default function ShipmentClient() {
                   </button>
                 </form>
               </section>
+              </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );

@@ -137,6 +137,7 @@ export default function InboundScannerPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [isLandscapeMobile, setIsLandscapeMobile] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [saveNotice, setSaveNotice] = useState("");
 
   // Data Item from QR
@@ -171,6 +172,7 @@ export default function InboundScannerPage() {
     const syncLandscapeMobile = () => {
       const mobile = window.innerWidth < 1024;
       const landscape = window.innerWidth > window.innerHeight;
+      setIsMobileViewport(mobile);
       setIsLandscapeMobile(mobile && landscape);
     };
     syncLandscapeMobile();
@@ -598,6 +600,8 @@ export default function InboundScannerPage() {
     window.dispatchEvent(new Event("aivas-toggle-admin-sidebar"));
   };
 
+  const isPortraitMobile = isMobileViewport && !isLandscapeMobile;
+
   return (
     <>
       {saveNotice && (
@@ -605,9 +609,9 @@ export default function InboundScannerPage() {
           {saveNotice}
         </div>
       )}
-      <div className="h-[100dvh] w-[100dvw] overflow-hidden bg-[#050b16] text-white flex">
+      <div className={`h-[100dvh] w-[100dvw] overflow-hidden bg-[#050b16] text-white flex ${isLandscapeMobile ? "flex-row" : "flex-col lg:flex-row"}`}>
         {/* LEFT BOX: Camera feed with overlay controls */}
-        <section className="relative flex-1 min-w-0 h-full overflow-hidden">
+        <section className={`relative min-w-0 overflow-hidden ${isLandscapeMobile ? "h-full flex-1" : "h-[48dvh] w-full lg:h-full lg:flex-1"}`}>
           {/* Camera feed - fits inside the box */}
           {cameraError ? (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-5 text-center">
@@ -654,7 +658,9 @@ export default function InboundScannerPage() {
         </section>
 
         {/* RIGHT BOX: Keypad & buttons - no rounded corners, hugs device edge */}
-        <section className={`relative h-full w-[45vw] max-w-[280px] flex flex-col bg-white text-slate-900 overflow-y-auto ${cameraMode === "qr" ? "pointer-events-none" : ""}`}>
+        <section className={`relative flex flex-col bg-white text-slate-900 overflow-y-auto ${
+          isLandscapeMobile ? "h-full w-[45vw] max-w-[280px]" : "h-[52dvh] w-full max-w-none lg:h-full lg:w-[45vw] lg:max-w-[280px]"
+        } ${cameraMode === "qr" ? "pointer-events-none" : ""}`}>
           {cameraMode === "qr" && (
             <div className="absolute inset-0 z-30 bg-white/85 backdrop-blur-[1px] flex items-center justify-center px-3 text-center">
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
@@ -695,23 +701,23 @@ export default function InboundScannerPage() {
           </div>
 
           {/* Numpad */}
-          <div className="grid grid-cols-3 gap-1.5 px-3 flex-1 min-h-0">
+          <div className="grid flex-1 min-h-0 grid-cols-3 auto-rows-fr gap-1.5 px-3 pb-2">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
               <button
                 key={num}
                 onClick={() => handleNumpad(num.toString())}
-                className="rounded-lg border border-slate-200/80 bg-white py-2 text-sm font-bold text-slate-700 shadow-sm transition-all active:scale-95 hover:bg-slate-50"
+                className="min-h-[2.5rem] rounded-lg border border-slate-200/80 bg-white py-2 text-sm font-bold text-slate-700 shadow-sm transition-all active:scale-95 hover:bg-slate-50"
               >
                 {num}
               </button>
             ))}
-            <button onClick={handleClear} className="rounded-lg border border-orange-200/60 bg-orange-50 py-2 text-sm font-bold text-orange-600 shadow-sm transition-all active:scale-95 hover:bg-orange-100">
+            <button onClick={handleClear} className="min-h-[2.5rem] rounded-lg border border-orange-200/60 bg-orange-50 py-2 text-sm font-bold text-orange-600 shadow-sm transition-all active:scale-95 hover:bg-orange-100">
               C
             </button>
-            <button onClick={() => handleNumpad("0")} className="rounded-lg border border-slate-200/80 bg-white py-2 text-sm font-bold text-slate-700 shadow-sm transition-all active:scale-95 hover:bg-slate-50">
+            <button onClick={() => handleNumpad("0")} className="min-h-[2.5rem] rounded-lg border border-slate-200/80 bg-white py-2 text-sm font-bold text-slate-700 shadow-sm transition-all active:scale-95 hover:bg-slate-50">
               0
             </button>
-            <button onClick={handleDelete} className="flex items-center justify-center rounded-lg border border-slate-200/80 bg-white py-2 text-slate-600 shadow-sm transition-all active:scale-95 hover:bg-slate-50">
+            <button onClick={handleDelete} className="flex min-h-[2.5rem] items-center justify-center rounded-lg border border-slate-200/80 bg-white py-2 text-slate-600 shadow-sm transition-all active:scale-95 hover:bg-slate-50">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="18" y1="9" x2="12" y2="15"></line><line x1="12" y1="9" x2="18" y2="15"></line></svg>
             </button>
           </div>
@@ -787,12 +793,11 @@ export default function InboundScannerPage() {
                   if (e.target.value.trim()) setRejectError(false);
                 }}
                 placeholder="Tulis alasan reject..."
-                className={`w-full h-20 bg-transparent resize-none outline-none text-gray-700 text-[14px] placeholder-gray-400 ${
+                className={`w-full h-20 bg-transparent resize-none outline-none text-slate-900 text-[14px] placeholder:text-slate-400 ${
                   rejectError ? "border border-red-300 rounded-md p-2" : ""
                 }`}
               />
               {rejectError && <p className="mt-1 text-[11px] font-semibold text-red-500">Alasan wajib diisi.</p>}
-              {!isLandscapeMobile && <VirtualKeyboard value={reasonInput} setValue={setReasonInput} onKeyPressCustom={(val) => { if (val.trim()) setRejectError(false); }} />}
             </div>
 
             <div className="grid grid-cols-2 gap-2 mt-auto">
@@ -841,9 +846,8 @@ export default function InboundScannerPage() {
                 value={finishComment}
                 onChange={(e) => setFinishComment(e.target.value)}
                 placeholder="Catatan singkat..."
-                className="w-full h-14 bg-transparent resize-none outline-none text-gray-700 text-[14px] placeholder-gray-400"
+                className="w-full h-14 bg-transparent resize-none outline-none text-slate-900 text-[14px] placeholder:text-slate-400"
               />
-              {!isLandscapeMobile && <VirtualKeyboard value={finishComment} setValue={setFinishComment} />}
             </div>
 
             <div className="grid grid-cols-2 gap-2 mt-auto pt-2">

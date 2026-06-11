@@ -1,18 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 function fmtDate(v) {
   if (!v) return "-";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleString("id-ID", {
+    timeZone: "Asia/Jakarta",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  });
+    second: "2-digit",
+  }) + " WIB";
 }
 
 function badgeClass(status) {
@@ -179,43 +182,61 @@ export default function DiscrepancyPage() {
         })}
       </div>
 
-      {selectedTicket && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
-          <div className="w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white p-4">
-            <div className="flex items-center justify-between mb-3">
+      {selectedTicket && typeof document !== "undefined" ? createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6"
+          onClick={() => setSelectedTicket(null)}
+        >
+          <div
+            className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[calc(100dvh-3rem)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 mb-0 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-4">
               <h2 className="text-lg font-bold text-slate-900">Evidence Ticket #{selectedTicket.id}</h2>
-              <button onClick={() => setSelectedTicket(null)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-semibold">Tutup</button>
+              <button
+                type="button"
+                onClick={() => setSelectedTicket(null)}
+                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Close modal"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {(photos.filter((p) => p.inbound_scan_id === selectedTicket.inbound_scan?.id)).map((p) => {
-                const src = p.signed_url || "";
-                return (
-                  <div key={p.id} className="rounded-xl border border-slate-200 p-2">
-                    {src ? <img src={src} alt={`evidence-${p.id}`} className="w-full h-44 object-cover rounded-lg bg-slate-100" /> : <div className="h-44 rounded-lg bg-slate-100 flex items-center justify-center text-xs text-slate-500">{p.url}</div>}
-                    <p className="mt-2 text-[11px] font-semibold text-slate-700">
-                      Qty aktual scan: {selectedTicket?.inbound_scan?.qty_actual ?? "-"}
-                    </p>
-                    <p className="mt-2 text-[11px] text-slate-500">{fmtDate(p.timestamp)}</p>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-4 rounded-xl border border-slate-200 p-3">
-              <h3 className="text-sm font-bold text-slate-800 mb-2">Geo Tag</h3>
-              <div className="space-y-2">
-                {geos.filter((g) => g.inbound_scan_id === selectedTicket.inbound_scan?.id).map((g) => (
-                  <div key={g.id} className="text-xs text-slate-600">
-                    {g.latitude}, {g.longitude} • acc {g.accuracy ?? "-"} • {fmtDate(g.timestamp)}
-                  </div>
-                ))}
-                {geos.filter((g) => g.inbound_scan_id === selectedTicket.inbound_scan?.id).length === 0 && (
-                  <p className="text-xs text-slate-500">Tidak ada geo tag.</p>
-                )}
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {(photos.filter((p) => p.inbound_scan_id === selectedTicket.inbound_scan?.id)).map((p) => {
+                  const src = p.signed_url || "";
+                  return (
+                    <div key={p.id} className="rounded-xl border border-slate-200 p-2">
+                      {src ? <img src={src} alt={`evidence-${p.id}`} className="w-full h-44 object-cover rounded-lg bg-slate-100" /> : <div className="h-44 rounded-lg bg-slate-100 flex items-center justify-center text-xs text-slate-500">{p.url}</div>}
+                      <p className="mt-2 text-[11px] font-semibold text-slate-700">
+                        Qty aktual scan: {selectedTicket?.inbound_scan?.qty_actual ?? "-"}
+                      </p>
+                      <p className="mt-2 text-[11px] text-slate-500">{fmtDate(p.timestamp)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 rounded-xl border border-slate-200 p-3">
+                <h3 className="mb-2 text-sm font-bold text-slate-800">Geo Tag</h3>
+                <div className="space-y-2">
+                  {geos.filter((g) => g.inbound_scan_id === selectedTicket.inbound_scan?.id).map((g) => (
+                    <div key={g.id} className="text-xs text-slate-600">
+                      {g.latitude}, {g.longitude} • acc {g.accuracy ?? "-"} • {fmtDate(g.timestamp)}
+                    </div>
+                  ))}
+                  {geos.filter((g) => g.inbound_scan_id === selectedTicket.inbound_scan?.id).length === 0 && (
+                    <p className="text-xs text-slate-500">Tidak ada geo tag.</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+      ) : null}
     </div>
   );
 }

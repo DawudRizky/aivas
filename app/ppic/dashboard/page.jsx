@@ -1,24 +1,67 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+function formatPercent(value) {
+  return `${Math.round(Number(value || 0) * 10) / 10}%`;
+}
+
+function formatTicketLabel(ticket) {
+  return `Ticket #${ticket?.id || "-"}`;
+}
+
+function getTicketStatusClass(status) {
+  const value = String(status || "").toLowerCase();
+  if (value === "returned") return "bg-emerald-50 text-emerald-600";
+  if (value === "recount") return "bg-amber-50 text-amber-600";
+  if (value === "open") return "bg-rose-50 text-rose-600";
+  return "bg-slate-100 text-slate-600";
+}
+
+function getSeverityClass(severity) {
+  const value = String(severity || "").toLowerCase();
+  if (value === "high") return "bg-rose-50 text-rose-600";
+  if (value === "medium") return "bg-amber-50 text-amber-600";
+  if (value === "low") return "bg-blue-50 text-blue-600";
+  return "bg-slate-100 text-slate-600";
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, { cache: "no-store" });
+  const data = await response.json().catch(() => []);
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || `Gagal memuat ${url}`);
+  }
+  return data;
+}
 
 export default function PpicDashboardPage() {
   const [deliveryOrders, setDeliveryOrders] = useState([]);
   const [discrepancyTickets, setDiscrepancyTickets] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let mounted = true;
 
+    setLoading(true);
+    setError("");
+
     Promise.all([
-      fetch('/api/delivery-order').then(r => r.json()).catch(() => []),
-      fetch('/api/discrepancy-ticket').then(r => r.json()).catch(() => []),
-      fetch('/api/vendor').then(r => r.json()).catch(() => []),
+      fetchJson('/api/delivery-order'),
+      fetchJson('/api/discrepancy-ticket'),
+      fetchJson('/api/vendor'),
     ]).then(([dos, tickets, vends]) => {
       if (!mounted) return;
       setDeliveryOrders(Array.isArray(dos) ? dos : []);
       setDiscrepancyTickets(Array.isArray(tickets) ? tickets : []);
       setVendors(Array.isArray(vends) ? vends : []);
-    }).catch(() => {});
+      setLoading(false);
+    }).catch((fetchError) => {
+      if (!mounted) return;
+      setError(fetchError?.message || "Gagal memuat dashboard.");
+      setLoading(false);
+    });
 
     return () => { mounted = false };
   }, []);
@@ -26,8 +69,56 @@ export default function PpicDashboardPage() {
   const totalShipments = deliveryOrders.length;
   const verifiedCount = deliveryOrders.filter(d => ['verified','received','delivered'].includes((d.status || '').toLowerCase())).length;
   const ticketCount = discrepancyTickets.length;
-  const matchRate = totalShipments > 0 ? Math.round(((totalShipments - ticketCount) / totalShipments) * 1000) / 10 : 100;
-  const openTickets = discrepancyTickets.filter(t => !(t.status && t.status.toLowerCase() === 'resolved')).length;
+  const matchRate = totalShipments > 0 ? Math.round(((totalShipments - ticketCount) / totalShipments) * 1000) / 10 : 0;
+  const openTickets = discrepancyTickets.filter(t => String(t.status || "").toLowerCase() === 'open').length;
+  const pendingShipments = totalShipments - verifiedCount;
+
+  const ticketStatusDistribution = useMemo(() => {
+    const counts = discrepancyTickets.reduce((acc, ticket) => {
+      const key = String(ticket.status || "unknown").toLowerCase();
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const entries = [
+      { key: "open", label: "Open", color: "bg-rose-500" },
+      { key: "recount", label: "Recount", color: "bg-amber-400" },
+      { key: "returned", label: "Returned", color: "bg-emerald-500" },
+    ];
+
+    return ticketCount === 0 ? [] : entries
+      .map((entry) => {
+        const count = counts[entry.key] || 0;
+        const percent = ticketCount > 0 ? (count / ticketCount) * 100 : 0;
+        return { ...entry, count, percent };
+      })
+      .filter((entry) => entry.count > 0);
+  }, [discrepancyTickets, ticketCount]);
+
+  const vendorPerformance = useMemo(() => {
+    return vendors.map((vendor) => {
+      const vendorId = Number(vendor.id);
+      const shipments = deliveryOrders.filter((deliveryOrder) => Number(deliveryOrder.vendor?.id || deliveryOrder.vendor_id || 0) === vendorId);
+      const tickets = discrepancyTickets.filter((ticket) => {
+        const ticketVendorId = Number(ticket?.inbound_scan?.qr_code?.delivery_order?.vendor?.id || 0);
+        return ticketVendorId === vendorId;
+      });
+      const matches = Math.max(0, shipments.length - tickets.length);
+      const score = shipments.length > 0 ? Math.round((matches / shipments.length) * 100) : null;
+
+      return {
+        id: vendor.id,
+        name: vendor.name,
+        shipments: shipments.length,
+        discrepancies: tickets.length,
+        matches,
+        score,
+      };
+    }).filter((vendor) => vendor.shipments > 0 || vendor.discrepancies > 0);
+  }, [deliveryOrders, discrepancyTickets, vendors]);
+
+  const recentTickets = useMemo(() => discrepancyTickets.slice(0, 5), [discrepancyTickets]);
+
   return (
     <div className="space-y-6 text-black">
       {/* Header Section */}
@@ -35,6 +126,12 @@ export default function PpicDashboardPage() {
         <h1 className="text-3xl font-bold text-slate-900">Dashboard Analytics</h1>
         <p className="text-gray-500 text-sm mt-1">Monitoring performa supply chain & discrepancy secara real-time</p>
       </div>
+
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      ) : null}
     
       {/* 4 Cards (Metrics) */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -46,15 +143,12 @@ export default function PpicDashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
               </svg>
             </div>
-            <div className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 mr-0.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
-              </svg>
-              12%
+            <div className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+              {vendors.length} vendor
             </div>
           </div>
             <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{totalShipments}</h3>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{loading ? "..." : totalShipments}</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Total Shipment</p>
           </div>
         </div>
@@ -67,15 +161,12 @@ export default function PpicDashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <div className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 mr-0.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
-              </svg>
-              89%
+            <div className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+              {pendingShipments} pending
             </div>
           </div>
           <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{verifiedCount}</h3>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{loading ? "..." : verifiedCount}</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Terverifikasi</p>
           </div>
         </div>
@@ -88,15 +179,12 @@ export default function PpicDashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
               </svg>
             </div>
-            <div className="flex items-center text-emerald-500 text-xs font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 mr-0.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
-              </svg>
-              2.3%
+            <div className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
+              {ticketCount} ticket
             </div>
           </div>
           <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{matchRate}%</h3>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{loading ? "..." : `${matchRate}%`}</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Match Rate</p>
           </div>
         </div>
@@ -109,15 +197,12 @@ export default function PpicDashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 010 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 010-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375z" />
               </svg>
             </div>
-            <div className="flex items-center text-rose-500 text-xs font-bold bg-rose-50 px-2 py-0.5 rounded-full">
-               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3 mr-0.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
-              </svg>
-              3
+            <div className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+              {ticketCount} total
             </div>
           </div>
           <div>
-            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{openTickets}</h3>
+            <h3 className="text-3xl font-black text-slate-800 tracking-tight">{loading ? "..." : openTickets}</h3>
             <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mt-1">Open Tickets</p>
           </div>
         </div>
@@ -132,50 +217,25 @@ export default function PpicDashboardPage() {
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-blue-500">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
             </svg>
-            <h3 className="text-base font-bold text-slate-800">Distribusi Discrepancy</h3>
+            <h3 className="text-base font-bold text-slate-800">Distribusi Status Ticket</h3>
           </div>
 
           <div className="space-y-5">
-            {/* Match */}
-            <div>
-              <div className="flex justify-between items-end mb-1.5">
-                <span className="text-sm font-semibold text-slate-700">Match</span>
-                <span className="text-sm font-bold text-slate-800">33 <span className="text-xs text-slate-400 font-medium">(78.6%)</span></span>
+            {ticketStatusDistribution.length === 0 ? (
+              <p className="text-sm text-slate-500">Belum ada data discrepancy ticket di database.</p>
+            ) : ticketStatusDistribution.map((entry) => (
+              <div key={entry.key}>
+                <div className="flex justify-between items-end mb-1.5">
+                  <span className="text-sm font-semibold text-slate-700">{entry.label}</span>
+                  <span className="text-sm font-bold text-slate-800">
+                    {entry.count} <span className="text-xs text-slate-400 font-medium">({formatPercent(entry.percent)})</span>
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-2">
+                  <div className={`${entry.color} h-2 rounded-full`} style={{ width: `${entry.percent}%` }}></div>
+                </div>
               </div>
-              <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-emerald-500 h-2 rounded-full" style={{ width: '78.6%' }}></div>
-              </div>
-            </div>
-            {/* Mismatch */}
-            <div>
-              <div className="flex justify-between items-end mb-1.5">
-                <span className="text-sm font-semibold text-slate-700">Mismatch</span>
-                <span className="text-sm font-bold text-slate-800">5 <span className="text-xs text-slate-400 font-medium">(11.9%)</span></span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-rose-500 h-2 rounded-full" style={{ width: '11.9%' }}></div>
-              </div>
-            </div>
-            {/* Missing */}
-            <div>
-              <div className="flex justify-between items-end mb-1.5">
-                <span className="text-sm font-semibold text-slate-700">Missing</span>
-                <span className="text-sm font-bold text-slate-800">3 <span className="text-xs text-slate-400 font-medium">(7.1%)</span></span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-amber-400 h-2 rounded-full" style={{ width: '7.1%' }}></div>
-              </div>
-            </div>
-            {/* Over */}
-            <div>
-              <div className="flex justify-between items-end mb-1.5">
-                <span className="text-sm font-semibold text-slate-700">Over</span>
-                <span className="text-sm font-bold text-slate-800">1 <span className="text-xs text-slate-400 font-medium">(2.4%)</span></span>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2">
-                <div className="bg-blue-500 h-2 rounded-full" style={{ width: '2.4%' }}></div>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
 
@@ -189,33 +249,26 @@ export default function PpicDashboardPage() {
           </div>
 
               <div className="space-y-4 flex-1">
-            {vendors.map((v) => {
-              const shipments = deliveryOrders.filter(d => (d.vendor?.id || d.vendor_id) === v.id).length;
-              // approximate discrepancy count per vendor by counting tickets whose inbound_scan?.status mentions vendor indirectly (best-effort)
-              const discrepancies = discrepancyTickets.filter(t => {
-                try {
-                  return (t.inbound_scan && t.inbound_scan.vendor_id && t.inbound_scan.vendor_id === v.id);
-                } catch { return false }
-              }).length;
-              const score = shipments > 0 ? Math.round(((shipments - discrepancies) / shipments) * 100) : 100;
-
-              return (
-                <div key={v.id} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-bold text-slate-800">{v.name}</span>
-                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">Score: {score}%</span>
+            {vendorPerformance.length === 0 ? (
+              <p className="text-sm text-slate-500">Belum ada performa vendor yang bisa dihitung dari data shipment dan discrepancy.</p>
+            ) : vendorPerformance.map((vendor) => (
+                <div key={vendor.id} className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                  <div className="flex justify-between items-center mb-2 gap-3">
+                    <span className="text-sm font-bold text-slate-800">{vendor.name}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${vendor.score === null ? "bg-slate-100 text-slate-600" : "bg-emerald-100 text-emerald-600"}`}>
+                      {vendor.score === null ? "Belum ada shipment" : `Score: ${vendor.score}%`}
+                    </span>
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-1.5 mb-2">
-                    <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${score}%` }}></div>
+                    <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${vendor.score || 0}%` }}></div>
                   </div>
                   <div className="flex gap-3 text-[10px] text-slate-500 font-medium">
-                    <span>{shipments} shipment</span>
-                    <span className="text-emerald-500">{Math.max(0, shipments - discrepancies)} match</span>
-                    <span className="text-rose-500">{discrepancies} discrepancy</span>
+                    <span>{vendor.shipments} shipment</span>
+                    <span className="text-emerald-500">{vendor.matches} match</span>
+                    <span className="text-rose-500">{vendor.discrepancies} discrepancy</span>
                   </div>
                 </div>
-              )
-            })}
+            ))}
           </div>
         </div>
 
@@ -230,41 +283,30 @@ export default function PpicDashboardPage() {
           <h3 className="text-base font-bold text-slate-800">Ticket Discrepancy Terbaru</h3>
         </div>
         <div className="p-2 space-y-1">
-          {/* Ticket 1 */}
-          <div className="p-3 hover:bg-slate-50 rounded-lg transition-colors flex items-center justify-between group">
-            <div>
-              <h4 className="text-sm font-bold text-slate-800">TKT-2026-001</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">PT. Maju Komponen • SHP-2026-001</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded bg-rose-50 text-rose-600 text-[10px] font-bold tracking-wide uppercase">Mismatch</span>
-              <span className="px-2.5 py-1 rounded bg-slate-100 text-slate-600 text-[10px] font-bold tracking-wide uppercase">Open</span>
-            </div>
-          </div>
-          
-          {/* Ticket 2 */}
-          <div className="p-3 hover:bg-slate-50 rounded-lg transition-colors flex items-center justify-between group">
-            <div>
-              <h4 className="text-sm font-bold text-slate-800">TKT-2026-002</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">CV. Sejahtera Parts • SHP-2026-002</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded bg-amber-50 text-amber-600 text-[10px] font-bold tracking-wide uppercase">Missing</span>
-              <span className="px-2.5 py-1 rounded bg-amber-50 text-amber-600 text-[10px] font-bold tracking-wide uppercase">Hold</span>
-            </div>
-          </div>
+          {recentTickets.length === 0 ? (
+            <div className="p-3 text-sm text-slate-500">Belum ada discrepancy ticket di database.</div>
+          ) : recentTickets.map((ticket) => {
+            const vendorName = ticket?.inbound_scan?.qr_code?.delivery_order?.vendor?.name || "";
+            const doNumber = ticket?.inbound_scan?.qr_code?.delivery_order?.do_number || "";
+            const itemName = ticket?.inbound_scan?.qr_code?.item?.name || "";
+            const severity = ticket?.severity ? String(ticket.severity) : "";
+            const status = ticket?.status ? String(ticket.status) : "";
+            const metaLine = [vendorName, doNumber].filter(Boolean).join(" • ");
 
-          {/* Ticket 3 */}
-          <div className="p-3 hover:bg-slate-50 rounded-lg transition-colors flex items-center justify-between group">
-            <div>
-              <h4 className="text-sm font-bold text-slate-800">TKT-2026-003</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">PT. Maju Komponen • SHP-2026-003</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded bg-blue-50 text-blue-600 text-[10px] font-bold tracking-wide uppercase">Over</span>
-              <span className="px-2.5 py-1 rounded bg-emerald-50 text-emerald-600 text-[10px] font-bold tracking-wide uppercase">Resolved</span>
-            </div>
-          </div>
+            return (
+              <div key={ticket.id} className="p-3 hover:bg-slate-50 rounded-lg transition-colors flex items-center justify-between gap-3 group">
+                <div className="min-w-0">
+                  <h4 className="text-sm font-bold text-slate-800">{formatTicketLabel(ticket)}</h4>
+                  {metaLine ? <p className="text-[11px] text-slate-400 mt-0.5 truncate">{metaLine}</p> : null}
+                  {itemName ? <p className="text-[11px] text-slate-500 mt-1 truncate">{itemName}</p> : null}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {severity ? <span className={`px-2.5 py-1 rounded text-[10px] font-bold tracking-wide uppercase ${getSeverityClass(severity)}`}>{severity}</span> : null}
+                  {status ? <span className={`px-2.5 py-1 rounded text-[10px] font-bold tracking-wide uppercase ${getTicketStatusClass(status)}`}>{status}</span> : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

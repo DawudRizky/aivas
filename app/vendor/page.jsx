@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
 export default function VendorPurchaseOrderPage() {
@@ -203,31 +204,33 @@ export default function VendorPurchaseOrderPage() {
         </div>
       )}
 
-      {selectedPurchaseOrder ? (
+      {selectedPurchaseOrder && typeof document !== "undefined" ? createPortal(
         <div
-          className="fixed inset-0 z-[70] bg-slate-950/60 backdrop-blur-sm px-4 py-6 flex items-center justify-center lg:left-64 lg:w-[calc(100vw-16rem)]"
+          className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-slate-950/60 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6"
           onClick={closePurchaseOrder}
         >
           <div
-            className="w-full max-w-5xl rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
+            className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-3rem)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50/80">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-slate-50/95 px-6 py-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">PO Detail</h2>
               </div>
               <button
                 type="button"
                 onClick={closePurchaseOrder}
-                className="h-10 w-10 rounded-full hover:bg-slate-200 text-slate-500 hover:text-slate-800"
+                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Close modal"
               >
-                X
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
-            <div className="p-6 bg-slate-50/60">
-                <div className="space-y-5">
+            <div className="flex flex-1 flex-col overflow-hidden bg-slate-50/60">
+                <div className="flex-1 space-y-5 overflow-y-auto p-6">
                   <div className="grid gap-3 sm:grid-cols-2 text-sm">
                     <div className="rounded-2xl bg-white border border-slate-200 p-4 sm:col-span-2">
                       <div className="text-slate-400 text-xs uppercase font-bold tracking-wider">PO Number</div>
@@ -274,7 +277,9 @@ export default function VendorPurchaseOrderPage() {
                       {actionError}
                     </div>
                   ) : null}
+                </div>
 
+                <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-4">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <button
                       type="button"
@@ -296,7 +301,8 @@ export default function VendorPurchaseOrderPage() {
                 </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );

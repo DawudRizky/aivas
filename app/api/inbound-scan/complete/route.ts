@@ -19,6 +19,192 @@ function buildEvidenceFilePath(inboundScanId: number, index: number, mimeType: s
   return `inbound/complete/${inboundScanId}/${fileName}`
 }
 
+function getLatestInboundScan(scans: Array<{ id?: number | null; status?: string | null; qty_actual?: number | null; scanned_at?: string | null }>) {
+  return scans
+    .slice()
+    .sort((a, b) => {
+      const scannedAtDiff = new Date(b.scanned_at || 0).getTime() - new Date(a.scanned_at || 0).getTime()
+      if (scannedAtDiff !== 0) return scannedAtDiff
+      return Number(b.id || 0) - Number(a.id || 0)
+    })[0]
+}
+
+async function syncOrderReceiptStatus(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  deliveryOrderItemId: number
+) {
+  const { data: deliveryOrderItem, error: deliveryOrderItemError } = await supabase
+    .from('delivery_order_item')
+    .select('delivery_order_id')
+    .eq('id', deliveryOrderItemId)
+    .maybeSingle()
+
+  if (deliveryOrderItemError) {
+    return { error: deliveryOrderItemError }
+  }
+
+  const deliveryOrderId = Number(deliveryOrderItem?.delivery_order_id || 0)
+  if (!deliveryOrderId) {
+    return {
+      error: { message: 'Delivery order item tidak memiliki delivery_order_id valid' },
+    }
+  }
+
+  const { data: qrRows, error: qrRowsError } = await supabase
+    .from('qr_code')
+    .select(`
+      id,
+      item_id,
+      quantity,
+      purchase_order_id,
+      inbound_scan (
+        id,
+        status,
+        qty_actual,
+        scanned_at
+      )
+    `)
+    .eq('delivery_order_id', deliveryOrderId)
+
+  if (qrRowsError) {
+    return { error: qrRowsError }
+  }
+
+  const latestInboundByQr = new Map<number, { status: string; qty_actual: number }>()
+  let purchaseOrderId = 0
+
+  for (const qrRow of qrRows || []) {
+    const qrId = Number(qrRow.id || 0)
+    const relatedPurchaseOrderId = Number(qrRow.purchase_order_id || 0)
+    if (relatedPurchaseOrderId) {
+      purchaseOrderId = relatedPurchaseOrderId
+    }
+
+    const scans = Array.isArray(qrRow.inbound_scan) ? qrRow.inbound_scan : []
+    const latestScan = getLatestInboundScan(scans)
+
+    if (qrId && latestScan) {
+      latestInboundByQr.set(qrId, {
+        status: String(latestScan.status || ''),
+        qty_actual: Number(latestScan.qty_actual || 0),
+      })
+    }
+
+  }
+
+  const hasAnyQr = (qrRows || []).length > 0
+  const allQrMatched = hasAnyQr && (qrRows || []).every((qrRow) => {
+    const qrId = Number(qrRow.id || 0)
+    const latestScan = latestInboundByQr.get(qrId)
+    return latestScan?.status.toLowerCase() === 'match'
+  })
+
+  let deliveryOrderStatus = null
+  if (allQrMatched) {
+    const { data: updatedDeliveryOrder, error: deliveryOrderUpdateError } = await supabase
+      .from('delivery_order')
+      .update({ status: 'received' })
+      .eq('id', deliveryOrderId)
+      .select('id, status, purchase_order_id')
+      .single()
+
+    if (deliveryOrderUpdateError) {
+      return { error: deliveryOrderUpdateError }
+    }
+
+    deliveryOrderStatus = updatedDeliveryOrder
+    purchaseOrderId = Number(updatedDeliveryOrder.purchase_order_id || purchaseOrderId || 0)
+  }
+
+  let purchaseOrderStatus = null
+  let purchaseOrderItems = null
+  if (purchaseOrderId) {
+    const { data: purchaseOrderQrRows, error: purchaseOrderQrRowsError } = await supabase
+      .from('qr_code')
+      .select(`
+        id,
+        item_id,
+        inbound_scan (
+          id,
+          status,
+          qty_actual,
+          scanned_at
+        )
+      `)
+      .eq('purchase_order_id', purchaseOrderId)
+
+    if (purchaseOrderQrRowsError) {
+      return { error: purchaseOrderQrRowsError }
+    }
+
+    const receivedQtyByItem = new Map<number, number>()
+    for (const qrRow of purchaseOrderQrRows || []) {
+      const itemId = Number(qrRow.item_id || 0)
+      const scans = Array.isArray(qrRow.inbound_scan) ? qrRow.inbound_scan : []
+      const latestScan = getLatestInboundScan(scans)
+
+      if (itemId && latestScan && String(latestScan.status || '').toLowerCase() === 'match') {
+        receivedQtyByItem.set(itemId, (receivedQtyByItem.get(itemId) || 0) + Number(latestScan.qty_actual || 0))
+      }
+    }
+
+    const { data: purchaseOrderRows, error: purchaseOrderRowsError } = await supabase
+      .from('purchase_order_item')
+      .select('id, item_id, quantity_ordered')
+      .eq('purchase_order_id', purchaseOrderId)
+
+    if (purchaseOrderRowsError) {
+      return { error: purchaseOrderRowsError }
+    }
+
+    const purchaseOrderItemRows = purchaseOrderRows || []
+    for (const purchaseOrderItem of purchaseOrderItemRows) {
+      const nextReceivedQty = receivedQtyByItem.get(Number(purchaseOrderItem.item_id || 0)) || 0
+      const { error: poItemUpdateError } = await supabase
+        .from('purchase_order_item')
+        .update({ received_qty: nextReceivedQty })
+        .eq('id', purchaseOrderItem.id)
+
+      if (poItemUpdateError) {
+        return { error: poItemUpdateError }
+      }
+    }
+
+    purchaseOrderItems = purchaseOrderItemRows.map((purchaseOrderItem) => ({
+      id: purchaseOrderItem.id,
+      item_id: purchaseOrderItem.item_id,
+      quantity_ordered: Number(purchaseOrderItem.quantity_ordered || 0),
+      received_qty: receivedQtyByItem.get(Number(purchaseOrderItem.item_id || 0)) || 0,
+    }))
+
+    const allPurchaseOrderItemsReceived = purchaseOrderItems.length > 0 && purchaseOrderItems.every((purchaseOrderItem) => (
+      Number(purchaseOrderItem.received_qty || 0) >= Number(purchaseOrderItem.quantity_ordered || 0)
+    ))
+
+    if (allPurchaseOrderItemsReceived) {
+      const { data: updatedPurchaseOrder, error: purchaseOrderUpdateError } = await supabase
+        .from('purchase_order')
+        .update({ status: 'received' })
+        .eq('id', purchaseOrderId)
+        .select('id, status')
+        .single()
+
+      if (purchaseOrderUpdateError) {
+        return { error: purchaseOrderUpdateError }
+      }
+
+      purchaseOrderStatus = updatedPurchaseOrder
+    }
+  }
+
+  return {
+    error: null,
+    delivery_order: deliveryOrderStatus,
+    purchase_order: purchaseOrderStatus,
+    purchase_order_items: purchaseOrderItems,
+  }
+}
+
 /**
  * Complete inbound scan with all evidence
  * POST /api/inbound-scan/complete
@@ -304,6 +490,24 @@ export async function POST(req: Request) {
       }
     }
 
+    let orderStatusUpdates = null
+    if (isMatch) {
+      const orderSyncResult = await syncOrderReceiptStatus(
+        supabase,
+        Number(delivery_order_item_id)
+      )
+
+      if (orderSyncResult.error) {
+        return NextResponse.json({ error: orderSyncResult.error.message }, { status: 500 })
+      }
+
+      orderStatusUpdates = {
+        delivery_order: orderSyncResult.delivery_order,
+        purchase_order: orderSyncResult.purchase_order,
+        purchase_order_items: orderSyncResult.purchase_order_items,
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Inbound scan berhasil diselesaikan',
@@ -316,7 +520,8 @@ export async function POST(req: Request) {
         photos: photoResults,
         geo_count: geoResults.length,
         inventory_record: inventoryRecord,
-        discrepancy_ticket: discrepancyTicket
+        discrepancy_ticket: discrepancyTicket,
+        order_updates: orderStatusUpdates
       }
     })
   } catch (error) {
