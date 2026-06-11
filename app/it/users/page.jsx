@@ -1,47 +1,82 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
-const EMPTY_USER = { id: null, name: "", email: "", role: "vendor", vendor_id: "", is_active: true, password: "" };
-const ROLE_OPTIONS = ["vendor", "admin", "ppic", "supervisor", "inbound", "it"];
+const EMPTY_USER = { id: null, name: "", email: "", role: "", vendor_id: "", is_active: true, password: "" };
+const ROLE_OPTIONS = [
+  { value: "it", label: "IT Admin" },
+  { value: "ppic", label: "PPIC" },
+  { value: "vendor", label: "Vendor" },
+  { value: "inbound", label: "Admin Inbound" },
+  { value: "supervisor", label: "Supervisor" },
+];
+
+function getRoleLabel(role) {
+  return ROLE_OPTIONS.find((option) => option.value === role)?.label || role || "-";
+}
 
 function UserModal({ open, form, vendors, saving, onChange, onClose, onSubmit }) {
+  const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setShowPassword(false);
+    }
+  }, [open]);
+
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-[28px] bg-white shadow-2xl ring-1 ring-slate-200">
-        <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6">
+      <div className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl ring-1 ring-slate-200 sm:max-h-[calc(100dvh-3rem)]">
+        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white px-6 py-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">IT Portal</p>
-            <h2 className="mt-1 text-2xl font-bold text-slate-900">{form.id ? "Edit User" : "Add User"}</h2>
+            <h2 className="text-2xl font-bold text-slate-900">{form.id ? "Edit User" : "Add User"}</h2>
           </div>
-          <button onClick={onClose} className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-500 transition hover:border-slate-300 hover:text-slate-900">
-            Close
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Close modal"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
-        <div className="grid gap-4 px-6 py-6 md:grid-cols-2">
+        <div className="grid flex-1 gap-4 overflow-y-auto px-6 py-6 md:grid-cols-2">
           <label className="space-y-2">
             <span className="text-sm font-semibold text-slate-700">Name</span>
-            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white" placeholder="User name" value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} />
+            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white" placeholder="User name" value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} />
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-slate-700">Email</span>
-            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white" type="email" placeholder="email@company.com" value={form.email} onChange={(e) => onChange({ ...form, email: e.target.value })} />
+            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white" type="email" placeholder="email@company.com" value={form.email} onChange={(e) => onChange({ ...form, email: e.target.value })} />
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-slate-700">Role</span>
-            <select className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white" value={form.role} onChange={(e) => onChange({ ...form, role: e.target.value, vendor_id: e.target.value === "vendor" ? form.vendor_id : "" })}>
+            <select
+              className={`w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white ${form.role ? "text-slate-900" : "text-slate-500"}`}
+              value={form.role}
+              onChange={(e) => onChange({ ...form, role: e.target.value, vendor_id: e.target.value === "vendor" ? form.vendor_id : "" })}
+            >
+              <option value="">Pilih role</option>
               {ROLE_OPTIONS.map((role) => (
-                <option key={role} value={role}>{role}</option>
+                <option key={role.value} value={role.value}>{role.label}</option>
               ))}
             </select>
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-slate-700">Vendor</span>
-            <select className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white disabled:cursor-not-allowed disabled:bg-slate-100" value={form.vendor_id} disabled={form.role !== "vendor"} onChange={(e) => onChange({ ...form, vendor_id: e.target.value })}>
-              <option value="">Tanpa vendor</option>
+            <select
+              className={`w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white disabled:cursor-not-allowed disabled:bg-slate-100 ${form.vendor_id ? "text-slate-900" : "text-slate-500"}`}
+              value={form.vendor_id}
+              disabled={form.role !== "vendor"}
+              onChange={(e) => onChange({ ...form, vendor_id: e.target.value })}
+            >
+              <option value="">Pilih vendor</option>
               {vendors.map((vendor) => (
                 <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
               ))}
@@ -49,7 +84,22 @@ function UserModal({ open, form, vendors, saving, onChange, onClose, onSubmit })
           </label>
           <label className="space-y-2 md:col-span-2">
             <span className="text-sm font-semibold text-slate-700">{form.id ? "Password baru" : "Password"}</span>
-            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white" type="password" placeholder={form.id ? "Kosongkan jika tidak ingin mengubah password" : "Set password"} value={form.password} onChange={(e) => onChange({ ...form, password: e.target.value })} />
+            <div className="relative">
+              <input
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 pr-20 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white"
+                type={showPassword ? "text" : "password"}
+                placeholder={form.id ? "Kosongkan jika tidak ingin mengubah password" : "Set password"}
+                value={form.password}
+                onChange={(e) => onChange({ ...form, password: e.target.value })}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
           </label>
           <label className="md:col-span-2 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
             <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={form.is_active} onChange={(e) => onChange({ ...form, is_active: e.target.checked })} />
@@ -57,7 +107,7 @@ function UserModal({ open, form, vendors, saving, onChange, onClose, onSubmit })
           </label>
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 px-6 py-5 sm:flex-row sm:justify-end">
+        <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-3 border-t border-slate-200 bg-white px-6 py-5 sm:flex-row sm:justify-end">
           <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900">
             Cancel
           </button>
@@ -66,7 +116,8 @@ function UserModal({ open, form, vendors, saving, onChange, onClose, onSubmit })
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -141,7 +192,7 @@ export default function ItUsersPage() {
       id: user.id,
       name: user.name || "",
       email: user.email || "",
-      role: user.role || "vendor",
+      role: user.role || "",
       vendor_id: user.vendor_id || "",
       is_active: Boolean(user.is_active),
       password: "",
@@ -220,7 +271,7 @@ export default function ItUsersPage() {
               <select className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-400" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
                 <option value="all">All roles</option>
                 {ROLE_OPTIONS.map((role) => (
-                  <option key={role} value={role}>{role}</option>
+                  <option key={role.value} value={role.value}>{role.label}</option>
                 ))}
               </select>
               <select className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-400" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -265,7 +316,7 @@ export default function ItUsersPage() {
                   <div className="text-xs text-slate-500">ID #{user.id}</div>
                 </div>
                 <div className="text-slate-600">{user.email}</div>
-                <div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase text-slate-700">{user.role}</span></div>
+                <div><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase text-slate-700">{getRoleLabel(user.role)}</span></div>
                 <div className="text-slate-600">{user.vendor?.name || "-"}</div>
                 <div>
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${user.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
@@ -294,7 +345,7 @@ export default function ItUsersPage() {
                 </span>
               </div>
               <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold uppercase">
-                <span className="rounded-full bg-white px-3 py-1 text-slate-700 ring-1 ring-slate-200">{user.role}</span>
+                <span className="rounded-full bg-white px-3 py-1 text-slate-700 ring-1 ring-slate-200">{getRoleLabel(user.role)}</span>
                 <span className="rounded-full bg-white px-3 py-1 text-slate-700 ring-1 ring-slate-200">{user.vendor?.name || "No vendor"}</span>
               </div>
               <div className="mt-4 flex gap-2">

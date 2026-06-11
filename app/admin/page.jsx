@@ -701,23 +701,23 @@ export default function InboundScannerPage() {
           </div>
 
           {/* Numpad */}
-          <div className="grid grid-cols-3 gap-1.5 px-3 flex-1 min-h-0">
+          <div className="grid flex-1 min-h-0 grid-cols-3 auto-rows-fr gap-1.5 px-3 pb-2">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
               <button
                 key={num}
                 onClick={() => handleNumpad(num.toString())}
-                className="rounded-lg border border-slate-200/80 bg-white py-2 text-sm font-bold text-slate-700 shadow-sm transition-all active:scale-95 hover:bg-slate-50"
+                className="min-h-[2.5rem] rounded-lg border border-slate-200/80 bg-white py-2 text-sm font-bold text-slate-700 shadow-sm transition-all active:scale-95 hover:bg-slate-50"
               >
                 {num}
               </button>
             ))}
-            <button onClick={handleClear} className="rounded-lg border border-orange-200/60 bg-orange-50 py-2 text-sm font-bold text-orange-600 shadow-sm transition-all active:scale-95 hover:bg-orange-100">
+            <button onClick={handleClear} className="min-h-[2.5rem] rounded-lg border border-orange-200/60 bg-orange-50 py-2 text-sm font-bold text-orange-600 shadow-sm transition-all active:scale-95 hover:bg-orange-100">
               C
             </button>
-            <button onClick={() => handleNumpad("0")} className="rounded-lg border border-slate-200/80 bg-white py-2 text-sm font-bold text-slate-700 shadow-sm transition-all active:scale-95 hover:bg-slate-50">
+            <button onClick={() => handleNumpad("0")} className="min-h-[2.5rem] rounded-lg border border-slate-200/80 bg-white py-2 text-sm font-bold text-slate-700 shadow-sm transition-all active:scale-95 hover:bg-slate-50">
               0
             </button>
-            <button onClick={handleDelete} className="flex items-center justify-center rounded-lg border border-slate-200/80 bg-white py-2 text-slate-600 shadow-sm transition-all active:scale-95 hover:bg-slate-50">
+            <button onClick={handleDelete} className="flex min-h-[2.5rem] items-center justify-center rounded-lg border border-slate-200/80 bg-white py-2 text-slate-600 shadow-sm transition-all active:scale-95 hover:bg-slate-50">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="18" y1="9" x2="12" y2="15"></line><line x1="12" y1="9" x2="18" y2="15"></line></svg>
             </button>
           </div>
@@ -793,12 +793,11 @@ export default function InboundScannerPage() {
                   if (e.target.value.trim()) setRejectError(false);
                 }}
                 placeholder="Tulis alasan reject..."
-                className={`w-full h-20 bg-transparent resize-none outline-none text-gray-700 text-[14px] placeholder-gray-400 ${
+                className={`w-full h-20 bg-transparent resize-none outline-none text-slate-900 text-[14px] placeholder:text-slate-400 ${
                   rejectError ? "border border-red-300 rounded-md p-2" : ""
                 }`}
               />
               {rejectError && <p className="mt-1 text-[11px] font-semibold text-red-500">Alasan wajib diisi.</p>}
-              {!isLandscapeMobile && <VirtualKeyboard value={reasonInput} setValue={setReasonInput} onKeyPressCustom={(val) => { if (val.trim()) setRejectError(false); }} />}
             </div>
 
             <div className="grid grid-cols-2 gap-2 mt-auto">
@@ -847,9 +846,8 @@ export default function InboundScannerPage() {
                 value={finishComment}
                 onChange={(e) => setFinishComment(e.target.value)}
                 placeholder="Catatan singkat..."
-                className="w-full h-14 bg-transparent resize-none outline-none text-gray-700 text-[14px] placeholder-gray-400"
+                className="w-full h-14 bg-transparent resize-none outline-none text-slate-900 text-[14px] placeholder:text-slate-400"
               />
-              {!isLandscapeMobile && <VirtualKeyboard value={finishComment} setValue={setFinishComment} />}
             </div>
 
             <div className="grid grid-cols-2 gap-2 mt-auto pt-2">

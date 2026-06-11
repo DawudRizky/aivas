@@ -740,7 +740,7 @@ export default function PpicPurchaseOrderPage() {
                               handleItemChange(item.id, 'item_query', e.target.value);
                             }}
                             placeholder="Pilih Item/SKU"
-                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white text-slate-800"
+                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-400"
                             disabled={!selectedVendor?.id || selectedVendorItems.length === 0}
                             autoComplete="off"
                           />
@@ -789,12 +789,12 @@ export default function PpicPurchaseOrderPage() {
                             step="1"
                             value={item.qty}
                             onChange={(e) => handleItemChange(item.id, 'qty', e.target.value)}
-                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white text-slate-800 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                           />
                         </div>
                         <div className="md:col-span-4">
                           <label className="block text-[11px] font-semibold text-slate-500 mb-1">Harga Satuan (IDR)</label>
-                          <div className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-700">
+                          <div className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-900">
                             Rp {formatRupiah(item.unit_price || 0)}
                           </div>
                         </div>

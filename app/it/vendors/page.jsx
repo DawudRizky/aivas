@@ -1,52 +1,59 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 const EMPTY_VENDOR = { id: null, name: "", contact_info: "", address: "", phone: "", status: "active" };
 
 function VendorModal({ open, form, saving, onChange, onClose, onSubmit }) {
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-[28px] bg-white shadow-2xl ring-1 ring-slate-200">
-        <div className="flex items-start justify-between border-b border-slate-200 px-6 py-5">
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6">
+      <div className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl ring-1 ring-slate-200 sm:max-h-[calc(100dvh-3rem)]">
+        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white px-6 py-5">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">IT Portal</p>
-            <h2 className="mt-1 text-2xl font-bold text-slate-900">{form.id ? "Edit Vendor" : "Add Vendor"}</h2>
+            <h2 className="text-2xl font-bold text-slate-900">{form.id ? "Edit Vendor" : "Add Vendor"}</h2>
           </div>
-          <button onClick={onClose} className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-500 transition hover:border-slate-300 hover:text-slate-900">
-            Close
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Close modal"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
-        <div className="grid gap-4 px-6 py-6 md:grid-cols-2">
+        <div className="grid flex-1 gap-4 overflow-y-auto px-6 py-6 md:grid-cols-2">
           <label className="space-y-2 md:col-span-2">
             <span className="text-sm font-semibold text-slate-700">Vendor name</span>
-            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white" placeholder="Vendor name" value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} />
+            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white" placeholder="Vendor name" value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} />
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-slate-700">Contact info</span>
-            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white" placeholder="PIC or email" value={form.contact_info} onChange={(e) => onChange({ ...form, contact_info: e.target.value })} />
+            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white" placeholder="PIC or email" value={form.contact_info} onChange={(e) => onChange({ ...form, contact_info: e.target.value })} />
           </label>
           <label className="space-y-2">
             <span className="text-sm font-semibold text-slate-700">Phone</span>
-            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white" placeholder="Phone number" value={form.phone} onChange={(e) => onChange({ ...form, phone: e.target.value })} />
+            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white" placeholder="Phone number" value={form.phone} onChange={(e) => onChange({ ...form, phone: e.target.value })} />
           </label>
           <label className="space-y-2 md:col-span-2">
             <span className="text-sm font-semibold text-slate-700">Address</span>
-            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white" placeholder="Vendor address" value={form.address} onChange={(e) => onChange({ ...form, address: e.target.value })} />
+            <input className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:bg-white" placeholder="Vendor address" value={form.address} onChange={(e) => onChange({ ...form, address: e.target.value })} />
           </label>
           <label className="space-y-2 md:col-span-2">
             <span className="text-sm font-semibold text-slate-700">Status</span>
-            <select className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-slate-400 focus:bg-white" value={form.status} onChange={(e) => onChange({ ...form, status: e.target.value })}>
+            <select className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white" value={form.status} onChange={(e) => onChange({ ...form, status: e.target.value })}>
               <option value="active">active</option>
               <option value="inactive">inactive</option>
             </select>
           </label>
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 px-6 py-5 sm:flex-row sm:justify-end">
+        <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-3 border-t border-slate-200 bg-white px-6 py-5 sm:flex-row sm:justify-end">
           <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900">
             Cancel
           </button>
@@ -55,7 +62,8 @@ function VendorModal({ open, form, saving, onChange, onClose, onSubmit }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
